@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="pt-BR" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: https://books.google.com https://books.googleusercontent.com https://lh3.googleusercontent.com https://covers.openlibrary.org https://archive.org https://*.archive.org; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" />
+  <title>Lumi — Biblioteca Comunitária</title>
+  <link rel="stylesheet" href="vendor/bootstrap.min.css" />
+  <link rel="stylesheet" href="vendor/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script defer src="vendor/bootstrap.bundle.min.js"></script>
+  <script defer src="ts/Util.js"></script>
+  <script defer src="ts/Api.js"></script>
+  <script defer src="ts/Ui.js"></script>
+  <script defer src="ts/Html.js"></script>
+  <script defer src="ts/Graficos.js"></script>
+  <script defer src="ts/Estado.js"></script>
+  <script defer src="ts/PaginaBase.js"></script>
+  <script defer src="ts/PaginaDashboard.js"></script>
+  <script defer src="ts/PaginaLivros.js"></script>
+  <script defer src="ts/PaginaEmprestimos.js"></script>
+  <script defer src="ts/PaginaReservas.js"></script>
+  <script defer src="ts/PaginaLeitores.js"></script>
+  <script defer src="ts/PaginaCadastroSimples.js"></script>
+  <script defer src="ts/PaginaExplorar.js"></script>
+  <script defer src="ts/PaginaNotificacoes.js"></script>
+  <script defer src="ts/PaginaRelatorios.js"></script>
+  <script defer src="ts/PaginaEquipe.js"></script>
+  <script defer src="ts/Aplicacao.js"></script>
+</head>
+<body>
+  <section id="auth-shell" class="auth-shell">
+    <div class="auth-art">
+      <div class="auth-art-bg"></div>
+      <div class="auth-brand"><div class="brand-mark"><i class="bi bi-book-half"></i></div><span>LUMI<span class="brand-dot">.</span></span></div>
+      <div class="auth-art-content">
+        <span class="eyebrow light">UM LUGAR PARA CADA HISTÓRIA</span>
+        <h1>Histórias que<br />conectam <em>pessoas.</em></h1>
+        <p>Uma biblioteca mais organizada. Uma comunidade com mais oportunidades de descobrir, aprender e crescer.</p>
+        <div class="auth-books-art" aria-hidden="true"><div class="auth-book b1"></div><div class="auth-book b2"></div><div class="auth-book b3"></div><div class="auth-book b4"></div><div class="auth-book b5"></div></div>
+      </div>
+      <div class="auth-bottom">BIBLIOTECA COMUNITÁRIA &nbsp; · &nbsp; SISTEMA DE GESTÃO</div>
+    </div>
+    <div class="auth-form-area">
+      <div class="auth-box">
+        <div class="auth-icon"><i class="bi bi-shield-lock"></i></div>
+        <span class="eyebrow">BEM-VINDO AO LUMI</span>
+        <h2 id="auth-title">Entre na sua conta</h2>
+        <p id="auth-subtitle" class="text-muted mb-4">Use seus dados para acessar o painel da biblioteca.</p>
+        <form id="auth-form" autocomplete="off">
+          <div id="setup-name-group" class="mb-3 d-none"><label class="field-label" for="auth-name">Seu nome completo</label><input class="form-control field-input" id="auth-name" maxlength="120" placeholder="Nome do administrador" /></div>
+          <div class="mb-3"><label class="field-label" for="auth-username">Nome de usuário</label><div class="input-icon"><i class="bi bi-person"></i><input class="form-control field-input" id="auth-username" required maxlength="60" placeholder="Seu usuário" autocomplete="username" /></div></div>
+          <div class="mb-3"><label class="field-label" for="auth-password">Senha</label><div class="input-icon"><i class="bi bi-lock"></i><input type="password" class="form-control field-input" id="auth-password" required minlength="1" maxlength="200" placeholder="Digite sua senha" autocomplete="current-password" /><button type="button" class="eye-btn" data-action="ver-senha" data-alvo="auth-password" aria-label="Mostrar ou ocultar senha"><i class="bi bi-eye"></i></button></div></div>
+          <div id="setup-confirm-group" class="mb-3 d-none"><label class="field-label" for="auth-confirm">Repita a senha</label><div class="input-icon"><i class="bi bi-lock-fill"></i><input type="password" class="form-control field-input" id="auth-confirm" maxlength="72" placeholder="Repita a senha" autocomplete="new-password" /></div></div>
+          <button class="btn btn-primary btn-lg w-100 app-primary mt-2" type="submit" id="auth-submit">Entrar no sistema <i class="bi bi-arrow-right ms-2"></i></button>
+          <div id="auth-error" class="alert alert-danger mt-3 d-none" role="alert"></div>
+        </form>
+        <p class="auth-note"><i class="bi bi-shield-check"></i> Acesso protegido: senhas com hash bcrypt e bloqueio após tentativas erradas.</p>
+      </div>
+    </div>
+  </section>
+
+  <div id="app-shell" class="app-shell d-none">
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="brand-mark"><i class="bi bi-book-half"></i></div><div>LUMI<span class="brand-dot">.</span><small>Biblioteca comunitária</small></div></div>
+      <nav class="sidebar-scroll" aria-label="Menu principal">
+        <div class="sidebar-label">PRINCIPAL</div>
+        <button class="side-link active" data-page="dashboard"><i class="bi bi-grid-1x2"></i> Visão geral</button>
+        <button class="side-link" data-page="books"><i class="bi bi-bookshelf"></i> Acervo de livros</button>
+        <button class="side-link" data-page="loans"><i class="bi bi-arrow-left-right"></i> Empréstimos</button>
+        <button class="side-link" data-page="reservations"><i class="bi bi-bookmark-heart"></i> Reservas <span id="side-reserves" class="side-count d-none">0</span></button>
+        <button class="side-link" data-page="readers"><i class="bi bi-people"></i> Leitores</button>
+        <div class="sidebar-label second">CADASTROS</div>
+        <button class="side-link" data-page="authors"><i class="bi bi-pen"></i> Autores</button>
+        <button class="side-link" data-page="publishers"><i class="bi bi-building"></i> Editoras</button>
+        <div class="sidebar-label second">FERRAMENTAS</div>
+        <button class="side-link" data-page="explore"><i class="bi bi-search-heart"></i> Descobrir livros</button>
+        <button class="side-link" data-page="notifications"><i class="bi bi-bell"></i> Notificações <span id="side-notifs" class="side-count d-none">0</span></button>
+        <button class="side-link" data-page="reports"><i class="bi bi-file-earmark-bar-graph"></i> Relatórios e backup</button>
+        <button class="side-link admin-only d-none" data-page="team"><i class="bi bi-shield-check"></i> Equipe</button>
+      </nav>
+      <div class="sidebar-footer"><button class="side-link logout-link" data-action="sair"><i class="bi bi-box-arrow-left"></i> Sair da conta</button></div>
+    </aside>
+    <div class="app-workspace">
+      <header class="topbar">
+        <div class="topbar-location"><span id="breadcrumb">Biblioteca / Visão geral</span><span class="topbar-date" id="today"></span></div>
+        <div class="topbar-actions">
+          <div class="top-search"><i class="bi bi-search"></i><input id="global-search" data-input="busca" placeholder="Buscar nesta página (Ctrl+K)" aria-label="Buscar nesta página" /></div>
+          <button class="icon-button" data-action="tema" aria-label="Alternar tema claro/escuro" title="Tema claro/escuro"><i id="tema-icone" class="bi bi-moon-stars"></i></button>
+          <button class="icon-button bell-button" data-page="notifications" aria-label="Ver notificações"><i class="bi bi-bell"></i><span class="notification-dot d-none" id="notif-dot"></span></button>
+          <button class="user-chip" data-action="perfil" aria-label="Minha conta"><span class="avatar" id="user-avatar">A</span><div class="user-meta"><b id="user-name">Administrador</b><small id="user-role">Admin</small></div></button>
+        </div>
+      </header>
+      <main class="main-content" id="page-content"></main>
+      <footer class="workspace-footer">© 2026 Lumi · Feito para aproximar pessoas e livros <span>Electron + TypeScript + MySQL</span></footer>
+    </div>
+  </div>
+
+  <div class="modal fade" id="form-modal" tabindex="-1" aria-labelledby="form-modal-title" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" id="form-modal-dialog">
+      <form class="modal-content" id="modal-form" autocomplete="off">
+        <div class="modal-header"><div><span class="eyebrow" id="modal-kicker">CADASTRO</span><h3 class="modal-title" id="form-modal-title">Novo cadastro</h3></div><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button></div>
+        <div class="modal-body" id="modal-fields"></div>
+        <div class="modal-footer"><button type="button" class="btn btn-soft" id="cancel-modal" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary app-primary" id="save-modal">Salvar</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal fade" id="confirm-modal" tabindex="-1" aria-labelledby="confirm-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm-confirm">
+      <div class="modal-content">
+        <div class="modal-body text-center"><div class="confirm-icon danger" id="confirm-icon"><i class="bi bi-exclamation-triangle"></i></div><h3 id="confirm-title">Confirmar</h3><p id="confirm-text"></p></div>
+        <div class="modal-footer justify-content-center"><button type="button" class="btn btn-soft" data-bs-dismiss="modal">Cancelar</button><button type="button" class="btn btn-danger" id="confirm-ok">Confirmar</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="app-toast" role="status" aria-live="polite"></div>
+</body>
+</html>

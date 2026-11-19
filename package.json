@@ -1,0 +1,27 @@
+{
+  "name": "biblioteca-lumi",
+  "version": "1.2.0",
+  "private": true,
+  "description": "Sistema desktop de biblioteca comunitária - Electron, TypeScript e MySQL",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node dist/main/copiarArquivos.js",
+    "start": "npm run build && electron .",
+    "dev": "npm run start",
+    "db:setup": "npm run build && node dist/main/configurarBanco.js",
+    "check": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
+  },
+  "dependencies": {
+    "axios": "^1.8.4",
+    "bcryptjs": "^3.0.3",
+    "bootstrap": "^5.3.3",
+    "bootstrap-icons": "^1.11.3",
+    "dotenv": "^16.4.7",
+    "mysql2": "^3.14.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "electron": "^45.3.4",
+    "typescript": "^5.8.3"
+  }
+}
