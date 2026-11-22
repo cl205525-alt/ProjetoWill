@@ -1,16 +1,6 @@
-import axios from 'axios';
+import axios, { type AxiosInstance } from 'axios';
 import { ErroDominio, Validacao as V } from '../validacao';
-
-export interface ResultadoLivro {
-  titulo: string;
-  autores: string[];
-  editora: string;
-  ano: number | null;
-  isbn: string;
-  sinopse: string;
-  capa: string | null;
-  origem: string;
-}
+import { ano, autores, completarEdicao, incompleto, isbn13, lista, objeto, reunirCandidatos, sinopse, texto, type ResultadoLivro } from './PesquisaBibliografica';
 
 /**
  * Quatro consumos de API, cada um com uma finalidade real no sistema:
@@ -22,11 +12,10 @@ export interface ResultadoLivro {
  */
 export class IntegracoesService {
   private readonly chaveGoogle = process.env.GOOGLE_BOOKS_API_KEY || '';
-  private readonly cliente = axios.create({
-    timeout: 9000,
-    maxContentLength: 1024 * 1024,
+  constructor(private readonly cliente: AxiosInstance = axios.create({
+    timeout: 9000, maxContentLength: 1024 * 1024,
     headers: { Accept: 'application/json', 'User-Agent': 'LumiBiblioteca/1.2 (projeto escolar COTIL)' }
-  });
+  })) {}
 
   // Mantemos apenas pequenas imagens na memória durante a execução.
   private readonly capas = new Map<string, string | null>();
@@ -55,20 +44,17 @@ export class IntegracoesService {
     }
   }
 
-  private extrairGoogle(item: any): ResultadoLivro {
-    const info = item?.volumeInfo || {};
-    const identificadores = Array.isArray(info.industryIdentifiers) ? info.industryIdentifiers : [];
-    const codigo = identificadores.find((i: any) => i?.type === 'ISBN_13')
-      || identificadores.find((i: any) => i?.type === 'ISBN_10');
-    const anoTexto = String(info.publishedDate || '');
+  private extrairGoogle(item: unknown, esperado?: string): ResultadoLivro {
+    const info = objeto(objeto(item).volumeInfo);
+    const codigos = lista(info.industryIdentifiers).map(objeto)
+      .filter(i => i.type === 'ISBN_13' || i.type === 'ISBN_10').map(i => isbn13(i.identifier));
+    const imagens = objeto(info.imageLinks);
     return {
-      titulo: String(info.title || '').slice(0, 240),
-      autores: (Array.isArray(info.authors) ? info.authors : []).slice(0, 10).map((a: unknown) => String(a).slice(0, 160)),
-      editora: String(info.publisher || '').slice(0, 160),
-      ano: /^\d{4}/.test(anoTexto) ? Number(anoTexto.slice(0, 4)) : null,
-      isbn: String(codigo?.identifier || ''),
-      sinopse: String(info.description || '').replace(/<[^>]*>/g, '').slice(0, 3000),
-      capa: this.urlCapa(info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail),
+      titulo: texto(info.title, 240), autores: autores(info.authors), editora: texto(info.publisher, 160),
+      ano: ano(info.publishedDate),
+      isbn: esperado ? (codigos.includes(esperado) ? esperado : '') : codigos.find(Boolean) ?? '',
+      sinopse: sinopse(info.description),
+      capa: this.urlCapa(imagens.thumbnail) ?? this.urlCapa(imagens.smallThumbnail),
       origem: 'Google Books'
     };
   }
@@ -79,98 +65,158 @@ export class IntegracoesService {
     const consulta = V.texto(entrada.consulta, 'pesquisa', 120);
     const modo = V.opcao(entrada.modo ?? 'titulo', ['titulo', 'autor', 'livre'] as const, 'modo de busca');
     const prefixo = modo === 'titulo' ? 'intitle:' : modo === 'autor' ? 'inauthor:' : '';
-    const { data } = await this.cliente.get('https://www.googleapis.com/books/v1/volumes', {
+    const { data } = await this.cliente.get<unknown>('https://www.googleapis.com/books/v1/volumes', {
       params: { q: `${prefixo}${consulta}`, maxResults: 12, printType: 'books', ...(this.chaveGoogle ? { key: this.chaveGoogle } : {}) }
     });
-    const itens: any[] = Array.isArray(data?.items) ? data.items : [];
-    return itens.map(item => this.extrairGoogle(item)).filter(livro => livro.titulo);
+    return lista(objeto(data).items).map(item => this.extrairGoogle(item)).filter(livro => livro.titulo);
+  }
+
+  async buscarTitulo(tituloDado: unknown): Promise<ResultadoLivro[]> {
+    const titulo = V.texto(tituloDado, 'título para pesquisa', 240);
+    let resultados: ResultadoLivro[] = [];
+    try { resultados = await this.googleBooks({ consulta: titulo.slice(0, 120), modo: 'titulo' }); }
+    catch { /* A Open Library pode responder mesmo quando o Google Books não responde. */ }
+    if (resultados.length && !resultados.some(incompleto)) return reunirCandidatos(resultados);
+    try {
+      const open = await this.openLibraryPorTitulo(titulo);
+      return reunirCandidatos([...resultados, ...open]).slice(0, 20);
+    } catch {
+      if (resultados.length) return reunirCandidatos(resultados);
+      throw new ErroDominio('Não foi possível concluir a pesquisa por título. Tente novamente ou preencha manualmente.');
+    }
+  }
+
+  private async openLibraryPorTitulo(titulo: string): Promise<ResultadoLivro[]> {
+    const { data } = await this.cliente.get<unknown>('https://openlibrary.org/search.json', {
+      params: { q: titulo.replace(/[^\p{L}\p{N}\s]/gu, ' ').trim() || titulo, lang: 'pt', limit: 8,
+        fields: 'key,title,author_name,editions,editions.title,editions.isbn,editions.publisher,editions.publish_date,editions.cover_i' }
+    });
+    const obras = lista(objeto(data).docs).slice(0, 8).map(objeto);
+    const chaveTitulo = (valor: unknown): string => texto(valor, 240).normalize('NFD').toLowerCase()
+      .replace(/\p{M}/gu, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    const obraExata = obras.find(obra => chaveTitulo(obra.title) === chaveTitulo(titulo)
+      && !lista(objeto(obra.editions).docs).length && /^\/works\/OL[0-9]+W$/.test(texto(obra.key, 80)));
+    let edicoesDaObra: Record<string, unknown>[] = [];
+    if (obraExata) {
+      try {
+        const detalhe = await this.cliente.get<unknown>(`https://openlibrary.org${texto(obraExata.key, 80)}/editions.json`, { params: { limit: 12 } });
+        edicoesDaObra = lista(objeto(detalhe.data).entries).map(objeto).filter(e => chaveTitulo(e.title) === chaveTitulo(titulo)).slice(0, 4);
+      } catch { /* A obra ainda pode ser sugerida, sem dados de edição. */ }
+    }
+    return obras.flatMap(obra => {
+      const edicoes = obra === obraExata && edicoesDaObra.length ? edicoesDaObra : lista(objeto(obra.editions).docs).slice(0, 2);
+      // Sem uma edição, jamais use ISBN, capa ou editora agregados no nível da obra.
+      return (edicoes.length ? edicoes : [null]).map(itemEdicao => {
+        const edicao = objeto(itemEdicao);
+        const isbn = [...lista(edicao.isbn), ...lista(edicao.isbn_13), ...lista(edicao.isbn_10)].map(isbn13).find(Boolean) ?? '';
+        const idCapa = typeof edicao.cover_i === 'number' ? edicao.cover_i : lista(edicao.covers)[0];
+        return {
+          titulo: texto(edicao.title, 240) || texto(obra.title, 240), autores: autores(obra.author_name),
+          editora: texto([...lista(edicao.publisher), ...lista(edicao.publishers)][0], 160),
+          ano: ano(lista(edicao.publish_date)[0] ?? edicao.publish_date), isbn, sinopse: sinopse(edicao.description),
+          capa: typeof idCapa === 'number' && Number.isSafeInteger(idCapa) && idCapa > 0 ? this.urlCapa(`https://covers.openlibrary.org/b/id/${idCapa}-M.jpg?default=false`) : null,
+          origem: itemEdicao ? 'Open Library' : 'Open Library (obra sem edição identificada)'
+        };
+      });
+    }).filter(livro => livro.titulo);
   }
 
   private async googlePorIsbn(isbn: string): Promise<ResultadoLivro | null> {
-    const { data } = await this.cliente.get('https://www.googleapis.com/books/v1/volumes', {
+    const { data } = await this.cliente.get<unknown>('https://www.googleapis.com/books/v1/volumes', {
       params: { q: `isbn:${isbn}`, maxResults: 5, printType: 'books', ...(this.chaveGoogle ? { key: this.chaveGoogle } : {}) }
     });
-    const itens: any[] = Array.isArray(data?.items) ? data.items : [];
-    const resultados = itens.map(item => this.extrairGoogle(item)).filter(livro => livro.titulo);
-    // Não associar a capa de uma edição qualquer quando a API não devolve o ISBN pedido.
-    return resultados.find(livro => livro.isbn === isbn) || resultados[0] || null;
+    return reunirCandidatos(lista(objeto(data).items).map(item => this.extrairGoogle(item, isbn))
+      .filter(livro => livro.titulo && livro.isbn === isbn))[0] ?? null;
   }
 
-  private async openLibraryPorIsbn(isbn: string): Promise<ResultadoLivro | null> {
-    const resposta = await this.cliente.get(`https://openlibrary.org/isbn/${isbn}.json`, {
+  private async openLibraryPorIsbn(isbn: string, esperado: string): Promise<ResultadoLivro | null> {
+    const resposta = await this.cliente.get<unknown>(`https://openlibrary.org/isbn/${isbn}.json`, {
       validateStatus: (status: number) => status === 200 || status === 404
     });
     if (resposta.status === 404) return null;
-    const data = resposta.data;
-    const descricao = typeof data?.description === 'string' ? data.description : data?.description?.value || '';
-    let autoresReferencias: any[] = Array.isArray(data?.authors) ? data.authors : [];
-    const chaveObra = String(data?.works?.[0]?.key || '');
-    if (!autoresReferencias.length && /^\/works\/OL[0-9]+W$/.test(chaveObra)) {
+    const data = objeto(resposta.data);
+    const titulo = texto(data.title, 240);
+    if (!titulo || ![...lista(data.isbn_10), ...lista(data.isbn_13)].some(c => isbn13(c) === esperado)) return null;
+    let descricao = sinopse(data.description), autoresReferencias = lista(data.authors);
+    const chaveObra = texto(objeto(lista(data.works)[0]).key, 80);
+    if ((!autoresReferencias.length || !descricao) && /^\/works\/OL[0-9]+W$/.test(chaveObra)) {
       try {
-        const obra = await this.cliente.get(`https://openlibrary.org${chaveObra}.json`);
-        autoresReferencias = Array.isArray(obra.data?.authors) ? obra.data.authors : [];
+        const obra = objeto((await this.cliente.get<unknown>(`https://openlibrary.org${chaveObra}.json`)).data);
+        if (!autoresReferencias.length) autoresReferencias = lista(obra.authors);
+        if (!descricao) descricao = sinopse(obra.description);
       } catch { /* O título pode ser aproveitado sem os autores. */ }
     }
-    const chaves = autoresReferencias
-      .map((a: any) => String(a?.author?.key || a?.key || ''))
-      .filter((chave: string) => /^\/authors\/OL[0-9]+A$/.test(chave)).slice(0, 6);
-    const respostas = await Promise.allSettled(chaves.map((chave: string) => this.cliente.get(`https://openlibrary.org${chave}.json`)));
-    const autores = respostas
-      .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
-      .map(r => String(r.value.data?.name || '').slice(0, 160)).filter(Boolean);
+    const chaves = [...new Set(autoresReferencias.map(objeto)
+      .map(a => texto(objeto(a.author).key ?? a.key, 80))
+      .filter(chave => /^\/authors\/OL[0-9]+A$/.test(chave)))].slice(0, 6);
+    const respostas = await Promise.allSettled(chaves.map(chave => this.cliente.get<unknown>(`https://openlibrary.org${chave}.json`)));
+    const nomes = autores(respostas.flatMap(r => r.status === 'fulfilled' ? [objeto(r.value.data).name] : []));
 
     // Preferir o identificador da capa da edição. Se a API não o fornecer,
     // ?default=false faz a Open Library responder 404, em vez de um GIF vazio.
-    const idCapa = Array.isArray(data?.covers) ? Number(data.covers[0]) : 0;
-    const capa = idCapa > 0
+    const idCapa = lista(data.covers)[0];
+    const capa = typeof idCapa === 'number' && Number.isSafeInteger(idCapa) && idCapa > 0
       ? this.urlCapa(`https://covers.openlibrary.org/b/id/${idCapa}-M.jpg?default=false`)
       : this.urlCapa(`https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg?default=false`);
-    const anoTexto = String(data?.publish_date || '');
     return {
-      titulo: String(data?.title || '').slice(0, 240),
-      autores,
-      editora: String(data?.publishers?.[0] || '').slice(0, 160),
-      ano: /\d{4}/.test(anoTexto) ? Number(anoTexto.match(/\d{4}/)?.[0]) : null,
-      isbn,
-      sinopse: String(descricao).slice(0, 3000),
-      capa,
-      origem: 'Open Library'
+      titulo, autores: nomes, editora: texto(lista(data.publishers)[0], 160), ano: ano(data.publish_date),
+      isbn: esperado, sinopse: descricao, capa, origem: 'Open Library'
+    };
+  }
+
+  private async brasilApiPorIsbn(isbn: string): Promise<ResultadoLivro | null> {
+    const resposta = await this.cliente.get<unknown>(`https://brasilapi.com.br/api/isbn/v1/${isbn}`, {
+      params: { providers: 'cbl,mercado-editorial' }, validateStatus: (status: number) => status === 200 || status === 404
+    });
+    if (resposta.status === 404) return null;
+    const data = objeto(resposta.data);
+    const titulo = texto(data.title, 240);
+    if (!titulo || isbn13(data.isbn) !== isbn) return null;
+    const origem = data.provider === 'cbl' ? 'BrasilAPI (CBL)' : data.provider === 'mercado-editorial' ? 'BrasilAPI (Mercado Editorial)' : 'BrasilAPI';
+    const nomes = autores(data.authors).map(nome => {
+      const partes = nome.split(',').map(parte => parte.trim());
+      return data.provider === 'cbl' && partes.length === 2 && partes.every(Boolean) ? `${partes[1]} ${partes[0]}` : nome;
+    });
+    return {
+      titulo, autores: nomes, editora: texto(data.publisher, 160), ano: ano(data.year),
+      isbn, sinopse: sinopse(data.synopsis), capa: this.urlCapa(data.cover_url), origem
     };
   }
 
   // API 2: identificar uma edição pelo ISBN. Usa Open Library e complementa
   // os dados ausentes com Google Books, inclusive quando não há capa no Open Library.
   async openLibrary(isbnDado: unknown): Promise<ResultadoLivro> {
-    const isbn = V.isbn(isbnDado);
-    if (!isbn) throw new ErroDominio('Informe um ISBN de 10 ou 13 dígitos.');
+    const codigo = V.isbn(isbnDado), isbn = isbn13(codigo);
+    if (!isbn) throw new ErroDominio('Informe um ISBN válido de 10 ou 13 dígitos, com o dígito verificador correto.');
     const [open, google] = await Promise.allSettled([
-      this.openLibraryPorIsbn(isbn),
+      this.openLibraryPorIsbn(codigo, isbn),
       this.googlePorIsbn(isbn)
     ]);
     const original = open.status === 'fulfilled' ? open.value : null;
     const complementar = google.status === 'fulfilled' ? google.value : null;
-    if (!original && !complementar) {
-      if (open.status === 'rejected' && google.status === 'rejected') {
-        throw new ErroDominio('Não foi possível consultar as fontes bibliográficas. Verifique sua conexão.');
-      }
-      throw new ErroDominio('ISBN não encontrado na Open Library nem no Google Books.');
+    let livro = original && complementar ? completarEdicao(original, complementar) : original ?? complementar;
+    // Uma URL teórica por ISBN não equivale a uma capa disponível.
+    let capaExtra = livro?.capa ?? null;
+    if (capaExtra && !(await this.obterCapa(capaExtra))) {
+      const alternativa = complementar?.capa;
+      capaExtra = alternativa && alternativa !== capaExtra && await this.obterCapa(alternativa) ? alternativa : null;
+      if (capaExtra && livro && complementar) livro = completarEdicao({ ...livro, capa: null }, complementar);
     }
+    if (livro) livro = { ...livro, capa: capaExtra };
 
-    let capa = original?.capa || null;
-    if (capa && !(await this.obterCapa(capa))) capa = null;
-    if (!capa && complementar?.capa && await this.obterCapa(complementar.capa)) capa = complementar.capa;
-
-    const base = original?.titulo ? original : complementar!;
-    return {
-      titulo: base.titulo,
-      autores: original?.autores.length ? original.autores : complementar?.autores || [],
-      editora: original?.editora || complementar?.editora || '',
-      ano: original?.ano || complementar?.ano || null,
-      isbn,
-      sinopse: original?.sinopse || complementar?.sinopse || '',
-      capa,
-      origem: original && complementar ? 'Open Library + Google Books' : original ? 'Open Library' : 'Google Books'
-    };
+    if (!livro || incompleto(livro)) {
+      try {
+        const adicional = await this.brasilApiPorIsbn(isbn);
+        if (adicional) {
+          if (!livro?.capa && adicional.capa && !(await this.obterCapa(adicional.capa))) adicional.capa = null;
+          livro = livro ? completarEdicao(livro, adicional) : adicional;
+        }
+      } catch {
+        if (!livro) throw new ErroDominio('Não foi possível confirmar a edição em todas as fontes. Tente novamente ou preencha manualmente.');
+      }
+    }
+    if (!livro) throw new ErroDominio('Não foi possível localizar uma edição com esse ISBN. Confira o código ou tente buscar pelo título.');
+    return livro;
   }
 
   // Imagens passam pelo processo principal: contorna bloqueios de conteúdo
