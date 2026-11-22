@@ -15,7 +15,7 @@ class PaginaRelatorios extends PaginaBase {
       <div class="surface"><div class="surface-header"><div><h3>Relatórios</h3><p>Escolha o tipo e, na janela de salvar, a extensão: .txt (texto) ou .csv (planilha).</p></div></div>
         <div class="report-grid">${rel.map(([tipo, titulo, texto, icone]) => `<div class="report-card"><span class="stat-icon blue"><i class="bi bi-${icone}"></i></span><h4>${titulo}</h4><p>${texto}</p><button type="button" class="btn btn-soft" data-action="relatorio" data-tipo="${tipo}"><i class="bi bi-download me-2"></i>Exportar</button></div>`).join('')}</div></div>
       <div class="surface mt-4"><div class="surface-header"><div><h3>Backup dos dados</h3><p>Arquivo JSON com livros, autores, editoras, leitores, empréstimos, reservas e avisos.</p></div>${admin ? '' : Html.pill('Somente administradores', 'warning')}</div>
-        <div class="backup-row">${Html.secao('shield-lock', 'Por segurança, contas da equipe e senhas <b>não</b> entram no backup. Ao importar, registros de mesmo ID são atualizados e nada é apagado.')}
+        <div class="backup-row">${Html.secao('shield-lock', 'Por segurança, contas da equipe e senhas não entram no backup. Ao importar, registros de mesmo ID são atualizados e nada é apagado.')}
         <div class="d-flex gap-2 flex-wrap">${Html.botao('backup-exportar', 'Exportar backup', 'cloud-arrow-down', 'btn-primary app-primary', admin ? '' : 'disabled')}${Html.botao('backup-importar', 'Importar backup', 'cloud-arrow-up', 'btn-soft', admin ? '' : 'disabled')}</div></div></div>`;
   }
 
