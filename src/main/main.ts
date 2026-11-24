@@ -5,6 +5,9 @@ import { CadastroService } from './services/CadastroService';
 import { CirculacaoService, AvisoFila } from './services/CirculacaoService';
 import { IntegracoesService } from './services/IntegracoesService';
 import { ArquivosService } from './services/ArquivosService';
+import { EmailResendService } from './services/EmailResendService';
+import { LembretesDevolucaoService } from './services/LembretesDevolucaoService';
+import { LembretesDevolucaoRepositorio, tabelaLembretesAusente } from './repositorios/LembretesDevolucaoRepositorio';
 import { BibliotecaController } from './controllers/BibliotecaController';
 
 /** Ponto de entrada: janela, menu nativo, notificações do sistema e política de segurança. */
@@ -31,9 +34,33 @@ class Aplicacao {
       session.defaultSession.setPermissionRequestHandler((_wc, _permissao, resposta) => resposta(false));
       this.criarMenu();
       this.criarJanela();
+      this.iniciarLembretes();
       app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) this.criarJanela(); });
     });
     app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+  }
+
+  private iniciarLembretes(): void {
+    if (process.env.LEMBRETES_EMAIL_ATIVOS !== 'true') return;
+    const email = EmailResendService.configurar(process.env);
+    if (!email) console.warn('[Lembretes] Configure o remetente e a chave do provedor de e-mail.');
+    const servico = new LembretesDevolucaoService(new LembretesDevolucaoRepositorio(), email, () => {
+      const janela = this.janela;
+      if (janela && !janela.isDestroyed()) janela.webContents.send('notificacoes:atualizadas');
+    });
+    let erroAvisado = false;
+    const verificar = (): void => {
+      void servico.verificar().catch((erro: unknown) => {
+        if (erroAvisado) return;
+        erroAvisado = true;
+        console.warn(tabelaLembretesAusente(erro)
+          ? '[Lembretes] Atualize o banco com npm run db:setup para habilitar o envio.'
+          : '[Lembretes] Não foi possível verificar lembretes. Confira a conexão com o MySQL.');
+      });
+    };
+    verificar();
+    const timer = setInterval(verificar, 60_000);
+    app.once('before-quit', () => clearInterval(timer));
   }
 
   private endurecerSeguranca(): void {
