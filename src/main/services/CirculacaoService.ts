@@ -2,9 +2,25 @@ import { EventEmitter } from 'node:events';
 import { RowDataPacket, PoolConnection } from 'mysql2/promise';
 import { Conexao } from '../conexao';
 import { ErroDominio, Validacao as V } from '../validacao';
+import { tabelaLembretesAusente } from '../repositorios/LembretesDevolucaoRepositorio';
 
 /** Aviso gerado quando um exemplar reservado fica disponível (vira notificação interna e do sistema). */
 export interface AvisoFila { reservaId: number; leitorId: number; leitor: string; livro: string; }
+export interface ResumoNotificacoes { itens: RowDataPacket[]; pendentes: number; }
+
+const AVISOS_RESERVA = `SELECT n.id, 'reserva' AS tipo, n.lida, n.criada_em, p.nome AS leitor,
+  p.email, p.telefone, l.titulo AS livro, n.mensagem, NULL AS status_envio, NULL AS data_prevista,
+  NULL AS envio_epoch
+  FROM notificacoes n JOIN leitores p ON p.id = n.leitor_id
+  LEFT JOIN reservas r ON r.id = n.reserva_id LEFT JOIN livros l ON l.id = r.livro_id`;
+
+const AVISOS_DEVOLUCAO = `SELECT d.id, 'devolucao' AS tipo, d.lida, d.criada_em, p.nome AS leitor,
+  NULL AS email, NULL AS telefone, l.titulo AS livro, 'Lembrete de devolução por e-mail' AS mensagem,
+  d.status_envio, d.data_prevista, UNIX_TIMESTAMP(d.enviado_em) AS envio_epoch
+  FROM lembretes_devolucao d JOIN emprestimos e ON e.id = d.emprestimo_id
+  JOIN leitores p ON p.id = e.leitor_id JOIN livros l ON l.id = e.livro_id`;
+
+const ORDEM_AVISOS = 'ORDER BY lida ASC, criada_em DESC, id DESC';
 
 /**
  * Circulação: empréstimos, devoluções, reservas (fila) e notificações.
@@ -32,11 +48,26 @@ export class CirculacaoService extends EventEmitter {
       ORDER BY FIELD(r.status,'disponivel','aguardando','concluida','cancelada'), r.criada_em, r.id`);
   }
 
-  async notificacoes(): Promise<RowDataPacket[]> {
-    return Conexao.consultar<RowDataPacket>(`SELECT n.*, p.nome AS leitor, p.email, p.telefone, l.titulo AS livro
-      FROM notificacoes n JOIN leitores p ON p.id=n.leitor_id
-      LEFT JOIN reservas r ON r.id=n.reserva_id LEFT JOIN livros l ON l.id=r.livro_id
-      ORDER BY n.lida ASC, n.criada_em DESC, n.id DESC LIMIT 200`);
+  async notificacoes(comLembretes: boolean): Promise<ResumoNotificacoes> {
+    if (comLembretes) {
+      try { return await this.consultarNotificacoes(true); }
+      catch (erro) { if (!tabelaLembretesAusente(erro)) throw erro; }
+    }
+    return this.consultarNotificacoes(false);
+  }
+
+  private async consultarNotificacoes(comLembretes: boolean): Promise<ResumoNotificacoes> {
+    const reservas = `${AVISOS_RESERVA} ${ORDEM_AVISOS} LIMIT 200`;
+    const consulta = comLembretes
+      ? `(${reservas}) UNION ALL (${AVISOS_DEVOLUCAO} ${ORDEM_AVISOS} LIMIT 200) ${ORDEM_AVISOS}`
+      : reservas;
+    const contagemLembretes = comLembretes ? '+ (SELECT COUNT(*) FROM lembretes_devolucao WHERE lida = 0)' : '';
+    const [itens, [contagem]] = await Promise.all([
+      Conexao.consultar<RowDataPacket>(consulta),
+      Conexao.consultar<RowDataPacket & { pendentes: number }>(`SELECT
+        (SELECT COUNT(*) FROM notificacoes WHERE lida = 0) ${contagemLembretes} AS pendentes`)
+    ]);
+    return { itens, pendentes: Number(contagem.pendentes) };
   }
 
   async painel(): Promise<RowDataPacket> {
@@ -47,8 +78,7 @@ export class CirculacaoService extends EventEmitter {
       (SELECT COUNT(*) FROM emprestimos WHERE data_devolucao IS NULL) AS emprestimos,
       (SELECT COUNT(*) FROM emprestimos WHERE data_devolucao IS NULL AND data_prevista<CURDATE()) AS atrasados,
       (SELECT COUNT(*) FROM reservas WHERE status='aguardando') AS reservas,
-      (SELECT COUNT(*) FROM reservas WHERE status='disponivel') AS retiradas,
-      (SELECT COUNT(*) FROM notificacoes WHERE lida=0) AS avisos`);
+      (SELECT COUNT(*) FROM reservas WHERE status='disponivel') AS retiradas`);
     return stats;
   }
 
@@ -274,8 +304,18 @@ export class CirculacaoService extends EventEmitter {
     await Conexao.executar('UPDATE notificacoes SET lida=1 WHERE id=?', [V.inteiro(idDado, 'notificação')]);
   }
 
-  async marcarTodasNotificacoes(): Promise<void> {
-    await Conexao.executar('UPDATE notificacoes SET lida=1 WHERE lida=0');
+  async marcarLembrete(idDado: unknown): Promise<void> {
+    await Conexao.executar('UPDATE lembretes_devolucao SET lida=1 WHERE id=?', [V.inteiro(idDado, 'lembrete')]);
+  }
+
+  async marcarTodasNotificacoes(comLembretes: boolean): Promise<void> {
+    const marcarReservas = 'UPDATE notificacoes SET lida=1 WHERE lida=0';
+    if (!comLembretes) { await Conexao.executar(marcarReservas); return; }
+    await Conexao.transacao(async conn => {
+      await conn.execute(marcarReservas);
+      try { await conn.execute('UPDATE lembretes_devolucao SET lida=1 WHERE lida=0'); }
+      catch (erro) { if (!tabelaLembretesAusente(erro)) throw erro; }
+    });
   }
 
   async excluirNotificacao(idDado: unknown): Promise<void> {
