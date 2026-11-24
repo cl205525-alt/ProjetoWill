@@ -11,7 +11,7 @@ export const CANAL_IPC = 'biblioteca:acao';
 interface ContextoRota { pessoa: UsuarioSessao | null; janela: BrowserWindow | null; }
 type Executor = (dados: unknown, ctx: ContextoRota) => unknown | Promise<unknown>;
 type Acesso = 'publica' | 'logado' | 'admin';
-interface Rota { acesso: Acesso; executar: Executor; }
+interface Rota { acesso: Acesso; executar: Executor; contarAtividade: boolean; }
 
 /**
  * Controller (o "C" do MVC): recebe as ações do renderer, confere permissões numa
@@ -31,7 +31,9 @@ export class BibliotecaController {
     this.definirRotas();
   }
 
-  private rota(acao: string, acesso: Acesso, executar: Executor): void { this.rotas.set(acao, { acesso, executar }); }
+  private rota(acao: string, acesso: Acesso, executar: Executor, contarAtividade = true): void {
+    this.rotas.set(acao, { acesso, executar, contarAtividade });
+  }
 
   private definirRotas(): void {
     const a = this.auth, c = this.cadastros, ci = this.circulacao, api = this.apis, f = this.arquivos;
@@ -82,12 +84,15 @@ export class BibliotecaController {
     this.rota('reservations:reactivate', 'logado', d => ci.reativarReserva(d));
     this.rota('reservations:delete', 'admin', d => ci.excluirReserva(d));
     // Notificações
-    this.rota('notifications:list', 'logado', () => ci.notificacoes());
+    // Também é consultada em segundo plano; não deve adiar a expiração da sessão.
+    this.rota('notifications:list', 'logado', (_d, ctx) => ci.notificacoes(ctx.pessoa?.perfil === 'admin'), false);
     this.rota('notifications:read', 'logado', d => ci.marcarNotificacao(d));
-    this.rota('notifications:readall', 'logado', () => ci.marcarTodasNotificacoes());
+    this.rota('notifications:read-reminder', 'admin', d => ci.marcarLembrete(d));
+    this.rota('notifications:readall', 'logado', (_d, ctx) => ci.marcarTodasNotificacoes(ctx.pessoa?.perfil === 'admin'));
     this.rota('notifications:delete', 'logado', d => ci.excluirNotificacao(d));
     // APIs externas
     this.rota('apis:google', 'logado', d => api.googleBooks(d));
+    this.rota('apis:titulo', 'logado', d => api.buscarTitulo(d));
     this.rota('apis:isbn', 'logado', d => api.openLibrary(d));
     this.rota('apis:cover', 'logado', d => api.obterCapa(d));
     this.rota('apis:cep', 'logado', d => api.viaCep(d));
@@ -114,7 +119,7 @@ export class BibliotecaController {
       if (typeof acao !== 'string') throw new ErroDominio('Operação inválida.');
       const rota = this.rotas.get(acao);
       if (!rota) throw new ErroDominio('Operação não permitida.');
-      const pessoa = rota.acesso === 'publica' ? null : this.auth.exigir(rota.acesso === 'admin' ? 'admin' : undefined);
+      const pessoa = rota.acesso === 'publica' ? null : this.auth.exigir(rota.acesso === 'admin' ? 'admin' : undefined, rota.contarAtividade);
       const resultado = await rota.executar(dados, { pessoa, janela: this.obterJanela() });
       return { ok: true, data: resultado ?? null };
     } catch (erro) {
