@@ -28,3 +28,36 @@ interface Contexto {
   irPara(pagina: IdPagina): void;
   pagina(id: IdPagina): PaginaBase;
 }
+
+interface ResultadoBibliografico {
+  titulo: string;
+  autores: string[];
+  editora: string;
+  ano: number | null;
+  isbn: string;
+  sinopse: string;
+  capa: string | null;
+  origem: string;
+}
+
+type StatusEnvio = 'pendente' | 'enviado' | 'sem_email' | 'falha';
+
+interface Notificacao {
+  id: number;
+  tipo?: string;
+  leitor: string;
+  livro?: string;
+  mensagem: string;
+  lida: boolean | number;
+  telefone?: string;
+  email?: string;
+  criada_em?: string;
+  data_prevista?: string;
+  status_envio?: StatusEnvio;
+  envio_epoch?: number | null;
+}
+
+interface EventoNotificacao {
+  tipo: string;
+  pendentes: number;
+}
