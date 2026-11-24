@@ -35,10 +35,10 @@ export class AutenticacaoService {
   }
 
   /** Garante login (e, opcionalmente, perfil de administrador). Lança erro se não houver permissão. */
-  exigir(perfil?: Perfil): UsuarioSessao {
+  exigir(perfil?: Perfil, contarAtividade = true): UsuarioSessao {
     if (!this.sessaoValida() || !this.sessao) throw new ErroDominio('Sessão encerrada. Faça login novamente.', 'SESSAO');
-    this.ultimoAcesso = Date.now();
     if (perfil && this.sessao.perfil !== perfil) throw new ErroDominio('Apenas administradores podem realizar esta ação.');
+    if (contarAtividade) this.ultimoAcesso = Date.now();
     return this.sessao;
   }
 
