@@ -98,3 +98,21 @@ CREATE TABLE IF NOT EXISTS notificacoes (
   CONSTRAINT fk_not_res FOREIGN KEY (reserva_id) REFERENCES reservas(id) ON DELETE SET NULL,
   CONSTRAINT fk_not_leitor FOREIGN KEY (leitor_id) REFERENCES leitores(id)
 ) ENGINE=InnoDB;
+
+-- Registro de envio independente dos avisos de reserva. Rodar db:setup em uma
+-- instalação existente só acrescenta esta tabela; não altera as tabelas antigas.
+CREATE TABLE IF NOT EXISTS lembretes_devolucao (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  emprestimo_id INT NOT NULL,
+  data_prevista DATE NOT NULL,
+  chave_envio CHAR(36) CHARACTER SET ascii NOT NULL,
+  status_envio ENUM('pendente','enviado','falha','sem_email') NOT NULL DEFAULT 'pendente',
+  referencia_provedor VARCHAR(80) NULL,
+  lida BOOLEAN NOT NULL DEFAULT FALSE,
+  criada_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  tentativa_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  enviado_em TIMESTAMP NULL DEFAULT NULL,
+  CONSTRAINT fk_lembrete_emprestimo FOREIGN KEY (emprestimo_id) REFERENCES emprestimos(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_lembrete_emprestimo_prazo (emprestimo_id, data_prevista),
+  INDEX idx_lembrete_lida_criada (lida, criada_em, id)
+) ENGINE=InnoDB;
