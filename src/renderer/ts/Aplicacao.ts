@@ -1,4 +1,4 @@
-﻿/** Orquestra login, navegaÃ§Ã£o entre pÃ¡ginas, eventos globais e tema. */
+/** Orquestra login, navegação entre páginas, eventos globais e tema. */
 class Aplicacao {
   private readonly estado = new Estado();
   private usuarioAtual: Registro | null = null;
@@ -54,7 +54,7 @@ class Aplicacao {
   constructor() {
     Ui.iniciar();
     this.aplicarTema(this.lerTema());
-    Api.aoExpirarSessao = () => this.mostrarAutenticacao('SessÃ£o encerrada. FaÃ§a login novamente.');
+    Api.aoExpirarSessao = () => this.mostrarAutenticacao('Sessão encerrada. Faça login novamente.');
     document.querySelector<HTMLFormElement>('#auth-form')!.addEventListener('submit', e => void this.autenticar(e));
     document.addEventListener('click', e => void this.clique(e));
     document.addEventListener('submit', e => void this.formulario(e));
@@ -79,7 +79,7 @@ class Aplicacao {
   }
   private alternarTema(): void { this.aplicarTema(document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark'); }
 
-  // ---------- AutenticaÃ§Ã£o ----------
+  // ---------- Autenticação ----------
   private async inicializar(): Promise<void> {
     try {
       const estado = await Api.chamar<{ necessitaConfiguracao: boolean; usuario: Registro | null }>('auth:status');
@@ -117,7 +117,7 @@ class Aplicacao {
     const botao = document.querySelector<HTMLButtonElement>('#auth-submit')!;
     const valor = (id: string): string => document.querySelector<HTMLInputElement>(id)!.value;
     this.mostrarErroAuth('');
-    if (this.primeiraConfiguracao && valor('#auth-password') !== valor('#auth-confirm')) { this.mostrarErroAuth('As senhas nÃ£o conferem.'); return; }
+    if (this.primeiraConfiguracao && valor('#auth-password') !== valor('#auth-confirm')) { this.mostrarErroAuth('As senhas não conferem.'); return; }
     botao.disabled = true;
     try {
       this.usuarioAtual = await Api.chamar<Registro>(this.primeiraConfiguracao ? 'auth:setup' : 'auth:login', { nome: valor('#auth-name'), usuario: valor('#auth-username').trim(), senha: valor('#auth-password') });
@@ -129,7 +129,7 @@ class Aplicacao {
   }
 
   private async sair(): Promise<void> {
-    try { await Api.chamar('auth:logout'); } catch { /* jÃ¡ saiu */ }
+    try { await Api.chamar('auth:logout'); } catch { /* já saiu */ }
     this.paginas.clear();
     this.mostrarAutenticacao();
   }
@@ -143,7 +143,7 @@ class Aplicacao {
     ].map(p => [p.id, p] as [IdPagina, PaginaBase]));
     document.querySelector('#auth-shell')!.classList.add('d-none');
     document.querySelector('#app-shell')!.classList.remove('d-none');
-    const nome = String(u.nome ?? 'UsuÃ¡rio');
+    const nome = String(u.nome ?? 'Usuário');
     document.querySelector('#user-name')!.textContent = nome.split(' ')[0];
     document.querySelector('#user-avatar')!.textContent = Util.iniciais(nome);
     document.querySelector('#user-role')!.textContent = u.perfil === 'admin' ? 'Administrador' : 'Atendente';
@@ -226,7 +226,7 @@ class Aplicacao {
     const bruto = el.dataset.input;
     const [prefixo, nome] = bruto.includes('.') ? bruto.split('.') : [this.atual, bruto];
     if (nome === 'busca') {
-      // MantÃ©m a busca do topo e a da lista sincronizadas.
+      // Mantém a busca do topo e a da lista sincronizadas.
       const outro = document.querySelector<HTMLInputElement>(el.id === 'global-search' ? '#busca-local' : '#global-search');
       if (outro) outro.value = el.value;
     }
@@ -250,18 +250,18 @@ class Aplicacao {
     } catch (erro) { Ui.toast((erro as Error).message, true); }
   }
 
-  /** Alterar a prÃ³pria senha (qualquer perfil). */
+  /** Alterar a própria senha (qualquer perfil). */
   private abrirPerfil(): void {
     const u = this.usuarioAtual ?? {};
     Ui.abrirFormulario({
       kicker: 'MINHA CONTA', titulo: 'Perfil e senha', rotuloSalvar: 'Alterar senha',
-      corpo: `<div class="detail-hero compact">${Html.avatar(u.nome, 'avatar lg')}<div><h3>${Util.esc(u.nome)}</h3><p class="small-muted">@${Util.esc(u.usuario)} Â· ${u.perfil === 'admin' ? 'Administrador' : 'Atendente'}</p></div></div>
+      corpo: `<div class="detail-hero compact">${Html.avatar(u.nome, 'avatar lg')}<div><h3>${Util.esc(u.nome)}</h3><p class="small-muted">@${Util.esc(u.usuario)} · ${u.perfil === 'admin' ? 'Administrador' : 'Atendente'}</p></div></div>
         ${Html.campo('atual', 'Senha atual *', '', 'password', 'required autocomplete="current-password"')}
-        ${Html.campo('nova', 'Nova senha (mÃ­nimo 10 caracteres) *', '', 'password', 'required minlength="10" maxlength="72" autocomplete="new-password"')}
+        ${Html.campo('nova', 'Nova senha (mínimo 10 caracteres) *', '', 'password', 'required minlength="10" maxlength="72" autocomplete="new-password"')}
         ${Html.campo('confirmar', 'Repita a nova senha *', '', 'password', 'required minlength="10" maxlength="72" autocomplete="new-password"')}`,
       salvar: async form => {
         const f = new FormData(form);
-        if (f.get('nova') !== f.get('confirmar')) throw new Error('As senhas novas nÃ£o conferem.');
+        if (f.get('nova') !== f.get('confirmar')) throw new Error('As senhas novas não conferem.');
         await Api.chamar('auth:password', { atual: f.get('atual'), nova: f.get('nova') });
         Ui.toast('Senha alterada com sucesso!');
       }
@@ -269,7 +269,7 @@ class Aplicacao {
   }
 
   // ---------- Capas (imagens) ----------
-  /** Se a imagem remota falhar, o main baixa por Axios (domÃ­nio/tipo/tamanho validados); sem isso, mostra o Ã­cone. */
+  /** Se a imagem remota falhar, o main baixa por Axios (domínio/tipo/tamanho validados); sem isso, mostra o ícone. */
   private async erroCapa(evento: Event): Promise<void> {
     const img = evento.target;
     if (!(img instanceof HTMLImageElement) || !img.dataset.coverUrl) return;
@@ -295,7 +295,7 @@ class Aplicacao {
     marcador.innerHTML = '<i class="bi bi-book"></i>';
     img.replaceWith(marcador);
     const status = document.querySelector('#cover-preview-status');
-    if (status && marcador.closest('#book-cover-preview')) status.textContent = 'Capa indisponÃ­vel para esta ediÃ§Ã£o. VocÃª pode cadastrar o livro mesmo assim.';
+    if (status && marcador.closest('#book-cover-preview')) status.textContent = 'Capa indisponível para esta edição. Você pode cadastrar o livro mesmo assim.';
   }
 }
 

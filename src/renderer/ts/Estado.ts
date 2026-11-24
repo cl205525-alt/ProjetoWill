@@ -1,4 +1,4 @@
-﻿/** Cache dos dados exibidos. ApÃ³s qualquer alteraÃ§Ã£o, tudo Ã© recarregado do MySQL (a lista nunca fica velha). */
+/** Cache dos dados exibidos. Após qualquer alteração, tudo é recarregado do MySQL (a lista nunca fica velha). */
 class Estado {
   livros: Registro[] = [];
   leitores: Registro[] = [];

@@ -1,6 +1,6 @@
-﻿/** FunÃ§Ãµes utilitÃ¡rias puras (formataÃ§Ã£o, escape de HTML, datas). */
+/** Funções utilitárias puras (formatação, escape de HTML, datas). */
 class Util {
-  /** Escapa texto para HTML â€” defesa contra XSS (somado Ã  CSP restritiva do index.html). */
+  /** Escapa texto para HTML — defesa contra XSS (somado à CSP restritiva do index.html). */
   static esc(valor: unknown): string {
     return String(valor ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
@@ -18,7 +18,7 @@ class Util {
 
   /** 2026-03-04 â†’ 04/03/2026 */
   static data(valor: unknown): string {
-    if (!valor) return 'â€”';
+    if (!valor) return '—';
     const texto = String(valor).slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(texto)) return '—';
     const data = new Date(`${texto}T00:00:00Z`);
@@ -27,10 +27,10 @@ class Util {
   }
 
   static dataHora(valor: unknown): string {
-    if (!valor) return 'â€”';
+    if (!valor) return '—';
     const texto = String(valor);
     const hora = /[ T](\d{2}:\d{2})/.exec(texto);
-    return `${Util.data(texto)}${hora ? ` Ã s ${hora[1]}` : ''}`;
+    return `${Util.data(texto)}${hora ? ` às ${hora[1]}` : ''}`;
   }
 
   static hoje(): string {
@@ -54,7 +54,7 @@ class Util {
     return ((partes[0]?.[0] ?? '?') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
   }
 
-  /** Cor estÃ¡vel (0 a 7) para avatares, a partir do nome. */
+  /** Cor estável (0 a 7) para avatares, a partir do nome. */
   static cor(nome: unknown): number {
     let h = 0;
     for (const c of String(nome ?? '')) h = (h * 31 + c.charCodeAt(0)) >>> 0;
@@ -70,11 +70,11 @@ class Util {
       const u = new URL(valor.replace(/^http:\/\//i, 'https://'));
       const permitidos = ['books.google.com', 'books.googleusercontent.com', 'lh3.googleusercontent.com', 'covers.openlibrary.org'];
       if (u.protocol === 'https:' && permitidos.includes(u.hostname)) return u.toString();
-    } catch { /* URL invÃ¡lida: sem capa */ }
+    } catch { /* URL inválida: sem capa */ }
     return null;
   }
 
-  /** Larguras de barras vÃªm de data-w e sÃ£o aplicadas via CSSOM (a CSP proÃ­be style="" no HTML). */
+  /** Larguras de barras vêm de data-w e são aplicadas via CSSOM (a CSP proíbe style="" no HTML). */
   static aplicarLarguras(raiz: ParentNode = document): void {
     raiz.querySelectorAll<HTMLElement>('[data-w]').forEach(e => { e.style.width = `${e.dataset.w}%`; });
   }

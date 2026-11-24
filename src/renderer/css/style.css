@@ -1,4 +1,4 @@
-﻿/* ===== Lumi â€” tema claro/escuro (Bootstrap 5.3 data-bs-theme) ===== */
+/* ===== Lumi — tema claro/escuro (Bootstrap 5.3 data-bs-theme) ===== */
 :root{
   --ink:#1c2745;--muted:#7b86a2;--line:#e6eaf4;--canvas:#f4f6fc;--surface:#fff;--surface-2:#f8f9fe;
   --blue:#4a6cf0;--blue-dark:#2f4fd1;--navy:#131d3a;--green:#1fa886;--red:#e5566a;--orange:#f2994a;--amber:#f4b46d;
@@ -27,7 +27,7 @@ h1,h2,h3,h4{color:var(--ink)}
 @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
-/* ===== BotÃµes ===== */
+/* ===== Botões ===== */
 .btn{border-radius:11px;font-weight:600;font-size:13.5px;padding:.55rem 1rem}
 .app-primary{background:linear-gradient(135deg,var(--blue),var(--blue-dark));border:0;color:#fff;box-shadow:0 6px 16px color-mix(in srgb,var(--blue) 35%,transparent)}
 .app-primary:hover{transform:translateY(-1px);box-shadow:0 10px 22px color-mix(in srgb,var(--blue) 45%,transparent);color:#fff;background:linear-gradient(135deg,var(--blue),var(--blue-dark))}
@@ -60,7 +60,7 @@ h1,h2,h3,h4{color:var(--ink)}
 .eye-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--muted);padding:6px 9px;border-radius:8px}
 .eye-btn:hover{color:var(--blue)}
 
-/* ===== AutenticaÃ§Ã£o ===== */
+/* ===== Autenticação ===== */
 .auth-shell{display:flex;min-height:100vh;background:var(--canvas)}
 .auth-art{position:relative;flex:1.1;color:#fff;padding:40px 56px;display:flex;flex-direction:column;overflow:hidden;background:#0f1a3c}
 .auth-art-bg{position:absolute;inset:0;background:radial-gradient(900px 500px at 15% 10%,#3556e8 0%,transparent 60%),radial-gradient(700px 500px at 100% 100%,#8b5cf6 0%,transparent 55%),linear-gradient(160deg,#0f1a3c,#16275a)}
@@ -125,7 +125,7 @@ h1,h2,h3,h4{color:var(--ink)}
 .main-content{flex:1;overflow-y:auto;padding:30px 32px 24px}
 .workspace-footer{display:flex;justify-content:space-between;padding:14px 32px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);flex-shrink:0}
 
-/* ===== CabeÃ§alho de pÃ¡gina e superfÃ­cies ===== */
+/* ===== Cabeçalho de página e superfícies ===== */
 .page-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin-bottom:24px;flex-wrap:wrap}
 .page-heading h1{font-size:30px;font-weight:800;letter-spacing:-.4px;margin:0 0 6px}
 .page-heading p{margin:0;color:var(--muted);max-width:640px}
@@ -148,7 +148,7 @@ h1,h2,h3,h4{color:var(--ink)}
 .view-toggle button{border:0;background:transparent;width:34px;height:32px;border-radius:9px;color:var(--muted)}
 .view-toggle button.active{background:var(--surface);color:var(--blue);box-shadow:0 1px 4px rgba(20,32,70,.12)}
 
-/* ===== Tabelas, pills, aÃ§Ãµes ===== */
+/* ===== Tabelas, pills, ações ===== */
 .table-responsive{overflow-x:auto}
 .app-table{width:100%;border-collapse:separate;border-spacing:0;min-width:760px}
 .app-table th{font-size:10.5px;letter-spacing:1.1px;color:var(--muted);font-weight:700;text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -244,7 +244,7 @@ h1,h2,h3,h4{color:var(--ink)}
 .hbar-fill{height:100%;width:0;border-radius:9px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
 .hbar-fill.tone-0{background:var(--c1)}.hbar-fill.tone-1{background:var(--c2)}.hbar-fill.tone-2{background:var(--c3)}.hbar-fill.tone-3{background:var(--c4)}.hbar-fill.tone-4{background:var(--c5)}.hbar-fill.tone-5{background:var(--c6)}
 
-/* ===== Detalhes, modais, formulÃ¡rios ===== */
+/* ===== Detalhes, modais, formulários ===== */
 .modal-content{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow-lg)}
 .modal-header,.modal-footer{border-color:var(--line);padding:18px 24px}.modal-body{padding:22px 24px}
 .modal-title{font-size:20px;font-weight:800;margin:0}
@@ -262,7 +262,7 @@ h1,h2,h3,h4{color:var(--ink)}
 .cover-preview-row{display:flex;gap:16px;align-items:center;padding:14px;background:var(--surface-2);border:1px dashed var(--line);border-radius:14px}
 .cover-preview-info p{margin:4px 0;font-size:12.5px;color:var(--muted)}.cover-preview-info small{color:var(--muted)}
 
-/* ===== Explorar, avisos, relatÃ³rios ===== */
+/* ===== Explorar, avisos, relatórios ===== */
 .api-banner{display:flex;gap:16px;align-items:center;padding:18px 22px;border-radius:16px;margin-bottom:20px;color:#fff;background:linear-gradient(120deg,#0f9b78,#14b8c4)}
 .api-banner>i{font-size:30px}.api-banner h3{font-size:16px;margin:0 0 3px;color:#fff}.api-banner p{margin:0;color:#e6fffa;font-size:13px}
 .explore-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start}

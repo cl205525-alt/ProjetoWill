@@ -22,7 +22,7 @@ class PaginaNotificacoes extends PaginaBase {
       .filter(n => this.filtro === 'todas' || (this.filtro === 'lembretes' ? n.tipo === 'devolucao' : !n.lida));
     if (!itens.length) return Html.vazio(this.busca ? 'Nenhum aviso com essa busca.' : this.filtro === 'pendentes' ? 'Nenhum aviso não lido.' : 'Não há avisos para exibir.', 'bell-slash');
     this.numeroPagina = Math.min(this.numeroPagina, Math.ceil(itens.length / this.porPagina));
-    return `<div class="notice-list">${Html.fatiar(itens, this.numeroPagina, this.porPagina).map(n => this.aviso(n)).join('')}</div>
+    return `<div class="notice-list">${Html.fatiar(itens, this.numeroPagina, this.porPagina).map(n => this.aviso(n as Notificacao)).join('')}</div>
       <div class="table-foot"><span class="count-note">${Util.plural(itens.length, 'aviso', 'avisos')}</span>${Html.paginacao(itens.length, this.numeroPagina, this.porPagina)}</div>`;
   }
 
@@ -87,3 +87,4 @@ class PaginaNotificacoes extends PaginaBase {
     else await super.acao(nome, el);
   }
 }
+

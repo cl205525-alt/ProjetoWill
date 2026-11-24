@@ -1,4 +1,4 @@
-﻿/** Construtores de HTML reutilizados pelas pÃ¡ginas. Todo valor dinÃ¢mico passa por Util.esc. */
+/** Construtores de HTML reutilizados pelas páginas. Todo valor dinâmico passa por Util.esc. */
 class Html {
   static pill(texto: string, tom: Tom = 'neutral'): string { return `<span class="pill ${tom}">${Util.esc(texto)}</span>`; }
 
@@ -11,7 +11,7 @@ class Html {
   }
 
   static cabecalho(titulo: string, descricao: string, botoes = ''): string {
-    return `<div class="page-heading"><div><span class="eyebrow">GESTÃƒO DA BIBLIOTECA</span><h1>${Util.esc(titulo)}</h1><p>${Util.esc(descricao)}</p></div><div class="heading-actions">${botoes}</div></div>`;
+    return `<div class="page-heading"><div><span class="eyebrow">GESTÃO DA BIBLIOTECA</span><h1>${Util.esc(titulo)}</h1><p>${Util.esc(descricao)}</p></div><div class="heading-actions">${botoes}</div></div>`;
   }
 
   static vazio(texto = 'Nenhum registro encontrado.', icone = 'journal-x'): string {
@@ -44,7 +44,7 @@ class Html {
     return `<div class="field-block"><label class="field-label" for="field-${Util.esc(nome)}">${Util.esc(rotulo)}</label><select class="form-select field-input" id="field-${Util.esc(nome)}" name="${Util.esc(nome)}" ${extras}><option value="">${vazio}</option>${itens}</select></div>`;
   }
 
-  /** Lista de caixas de marcaÃ§Ã£o em forma de "chips" (melhor que select mÃºltiplo com Ctrl). */
+  /** Lista de caixas de marcação em forma de "chips" (melhor que select múltiplo com Ctrl). */
   static checks(nome: string, rotulo: string, opcoes: Registro[], marcados: unknown = ''): string {
     const ids = String(marcados ?? '').split(',').filter(Boolean);
     const itens = opcoes.map(o => `<label class="chip"><input type="checkbox" name="${Util.esc(nome)}" value="${Util.numero(o.id)}" ${ids.includes(String(o.id)) ? 'checked' : ''} /><span>${Util.esc(o.nome)}</span></label>`).join('');
@@ -64,13 +64,13 @@ class Html {
   static paginacao(total: number, pagina: number, porPagina: number): string {
     const paginas = Math.max(1, Math.ceil(total / porPagina));
     if (paginas <= 1) return '';
-    const botoes: string[] = [`<button type="button" class="page-btn" data-action="pg" data-pg="${pagina - 1}" ${pagina <= 1 ? 'disabled' : ''} aria-label="PÃ¡gina anterior"><i class="bi bi-chevron-left"></i></button>`];
+    const botoes: string[] = [`<button type="button" class="page-btn" data-action="pg" data-pg="${pagina - 1}" ${pagina <= 1 ? 'disabled' : ''} aria-label="Página anterior"><i class="bi bi-chevron-left"></i></button>`];
     for (let p = 1; p <= paginas; p++) {
       if (p === 1 || p === paginas || Math.abs(p - pagina) <= 1) botoes.push(`<button type="button" class="page-btn ${p === pagina ? 'active' : ''}" data-action="pg" data-pg="${p}">${p}</button>`);
-      else if (Math.abs(p - pagina) === 2) botoes.push('<span class="page-gap">â€¦</span>');
+      else if (Math.abs(p - pagina) === 2) botoes.push('<span class="page-gap">…</span>');
     }
-    botoes.push(`<button type="button" class="page-btn" data-action="pg" data-pg="${pagina + 1}" ${pagina >= paginas ? 'disabled' : ''} aria-label="PrÃ³xima pÃ¡gina"><i class="bi bi-chevron-right"></i></button>`);
-    return `<nav class="pager" aria-label="PaginaÃ§Ã£o">${botoes.join('')}</nav>`;
+    botoes.push(`<button type="button" class="page-btn" data-action="pg" data-pg="${pagina + 1}" ${pagina >= paginas ? 'disabled' : ''} aria-label="Próxima página"><i class="bi bi-chevron-right"></i></button>`);
+    return `<nav class="pager" aria-label="Paginação">${botoes.join('')}</nav>`;
   }
 
   static tabela(cabecalhos: string[], linhas: string[], total: number, pagina: number, porPagina: number): string {
