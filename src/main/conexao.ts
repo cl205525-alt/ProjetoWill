@@ -16,10 +16,8 @@ export const configuracaoBanco = {
   charset: 'utf8mb4' as const
 };
 
-/** Tipos aceitos como parâmetros `?` (consultas SEMPRE parametrizadas, nunca concatenadas). */
 export type ParametroSql = string | number | boolean | Date | Buffer | null;
 
-/** Acesso ao MySQL (pool de conexões). Toda a camada de serviços passa por aqui. */
 export class Conexao {
   private static pool: Pool | null = null;
 
@@ -46,7 +44,6 @@ export class Conexao {
     return result;
   }
 
-  /** Executa `acao` numa transação: commit se tudo der certo, rollback em qualquer erro. */
   static async transacao<T>(acao: (conn: PoolConnection) => Promise<T>): Promise<T> {
     const conn = await this.getPool().getConnection();
     try {

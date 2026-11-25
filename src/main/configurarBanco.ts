@@ -4,8 +4,7 @@ import { resolve } from 'node:path';
 import { configuracaoBanco } from './conexao';
 
 async function configurar(): Promise<void> {
-  // Usa um banco JA existente e permitido ao usuario do MySQL.
-  // O schema.sql deve conter apenas CREATE TABLE (sem CREATE DATABASE / USE).
+
   const conn = await mysql.createConnection({
     ...configuracaoBanco,
     multipleStatements: true
