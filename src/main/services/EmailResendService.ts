@@ -10,7 +10,6 @@ export interface EnviadorEmailLembrete {
   enviar(email: EmailLembrete): Promise<string>;
 }
 
-/** Aceita apenas um endereço, sem nome de exibição, controles ou separadores. */
 export function enderecoEmailUnico(valor: string | null | undefined): string | null {
   const email = valor?.trim();
   return email && email.length <= 180
