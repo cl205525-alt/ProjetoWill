@@ -5,16 +5,19 @@ interface ConfigFormulario {
   rotuloSalvar?: string;
   tamanho?: 'md' | 'lg' | 'xl';
   somenteLeitura?: boolean;
-  salvar?: (form: HTMLFormElement) => Promise<void>;
+
+  salvar?: (form: HTMLFormElement) => Promise<void | false>;
+  statusEnvioEmSegundoPlano?: HTMLElement;
   aoAbrir?: (form: HTMLFormElement) => void;
   aoFechar?: () => void;
 }
 
 interface OpcoesConfirmacao { titulo: string; mensagem: string; rotulo?: string; perigo?: boolean; icone?: string; }
 
-/** Janelas (modais Bootstrap) e avisos. Textos de confirmação entram via textContent (sem HTML). */
 class Ui {
   private static config: ConfigFormulario | null = null;
+  private static focoAntesDoFormulario: HTMLElement | null = null;
+  private static liberarEnvioIsolado?: () => void;
   private static modalForm: BsModal;
   private static modalConfirmar: BsModal;
   private static resolverConfirmacao: ((v: boolean) => void) | null = null;
@@ -25,7 +28,7 @@ class Ui {
     const elConf = document.querySelector<HTMLElement>('#confirm-modal')!;
     Ui.modalForm = bootstrap.Modal.getOrCreateInstance(elForm);
     Ui.modalConfirmar = bootstrap.Modal.getOrCreateInstance(elConf);
-    // O Bootstrap ignora hide() durante a animação de abertura: guardamos o pedido e fechamos quando terminar.
+
     for (const el of [elForm, elConf]) {
       el.addEventListener('shown.bs.modal', () => {
         el.dataset.pronto = '1';
@@ -35,13 +38,25 @@ class Ui {
     }
 
     elForm.addEventListener('shown.bs.modal', () => {
-      elForm.querySelector<HTMLElement>('#modal-fields input:not([type=hidden]):not([type=checkbox]), #modal-fields select, #modal-fields textarea')?.focus();
+      (elForm.querySelector<HTMLElement>('#modal-fields input:not([type=hidden]):not([type=checkbox]), #modal-fields select, #modal-fields textarea')
+        ?? elForm.querySelector<HTMLElement>('#cancel-modal'))?.focus();
     });
     elForm.addEventListener('hidden.bs.modal', () => {
+      Ui.liberarEnvioIsolado?.();
       const fechar = Ui.config?.aoFechar;
+      Ui.config?.statusEnvioEmSegundoPlano?.remove();
       Ui.config = null;
+      const focoAnterior = Ui.focoAntesDoFormulario;
+      Ui.focoAntesDoFormulario = null;
       document.querySelector('#modal-fields')!.innerHTML = '';
       fechar?.();
+      if (!Ui.config && (document.activeElement === document.body || elForm.contains(document.activeElement))) {
+        if (focoAnterior?.isConnected && !focoAnterior.matches(':disabled') && focoAnterior.getClientRects().length) focoAnterior.focus();
+        else {
+          const titulo = document.querySelector<HTMLElement>('#app-shell:not(.d-none) #page-content h1');
+          if (titulo) { titulo.tabIndex = -1; titulo.focus(); }
+        }
+      }
     });
     document.querySelector<HTMLFormElement>('#modal-form')!.addEventListener('submit', e => { e.preventDefault(); void Ui.enviar(); });
 
@@ -50,12 +65,16 @@ class Ui {
   }
 
   static abrirFormulario(cfg: ConfigFormulario): void {
+    if (!Ui.config && document.activeElement instanceof HTMLElement) Ui.focoAntesDoFormulario = document.activeElement;
+    Ui.liberarEnvioIsolado?.();
+    Ui.config?.statusEnvioEmSegundoPlano?.remove();
     Ui.config = cfg;
     document.querySelector('#modal-kicker')!.textContent = cfg.kicker;
     document.querySelector('#form-modal-title')!.textContent = cfg.titulo;
     document.querySelector('#modal-fields')!.innerHTML = cfg.corpo;
     document.querySelector('#form-modal-dialog')!.className = `modal-dialog modal-dialog-centered modal-dialog-scrollable${cfg.tamanho === 'xl' ? ' modal-xl' : cfg.tamanho === 'lg' ? ' modal-lg' : ''}`;
     const salvar = document.querySelector<HTMLButtonElement>('#save-modal')!;
+    if (cfg.statusEnvioEmSegundoPlano) salvar.parentElement!.prepend(cfg.statusEnvioEmSegundoPlano);
     salvar.classList.toggle('d-none', !!cfg.somenteLeitura);
     salvar.innerHTML = `${Util.esc(cfg.rotuloSalvar ?? 'Salvar')} <i class="bi bi-check2 ms-1"></i>`;
     document.querySelector('#cancel-modal')!.textContent = cfg.somenteLeitura ? 'Fechar' : 'Cancelar';
@@ -80,14 +99,35 @@ class Ui {
     const form = document.querySelector<HTMLFormElement>('#modal-form')!;
     if (!form.reportValidity()) return;
     const botao = document.querySelector<HTMLButtonElement>('#save-modal')!;
-    botao.disabled = true;
-    try {
-      await cfg.salvar(form);
-      Ui.fecharFormulario();
-    } catch (erro) {
-      Ui.toast((erro as Error).message, true);
-    } finally {
+    if (botao.disabled || Ui.liberarEnvioIsolado) return;
+    const status = cfg.statusEnvioEmSegundoPlano;
+    const cancelar = form.querySelector<HTMLButtonElement>('#cancel-modal')!;
+    const fechar = form.querySelector<HTMLButtonElement>('.btn-close')!;
+    const liberar = (): void => {
+      if (status) {
+        if (Ui.liberarEnvioIsolado !== liberar) return;
+        Ui.liberarEnvioIsolado = undefined;
+        cancelar.textContent = 'Cancelar';
+        cancelar.removeAttribute('aria-describedby');
+        fechar.removeAttribute('aria-describedby');
+      }
       botao.disabled = false;
+    };
+    if (status) {
+      Ui.liberarEnvioIsolado = liberar;
+      cancelar.textContent = 'Fechar formulário';
+      cancelar.setAttribute('aria-describedby', status.id);
+      fechar.setAttribute('aria-describedby', status.id);
+    } else botao.disabled = true;
+    try {
+
+      const envio = cfg.salvar(form);
+      if (Ui.liberarEnvioIsolado === liberar) botao.disabled = true;
+      if (await envio !== false && Ui.config === cfg) Ui.fecharFormulario();
+    } catch (erro) {
+      if (!status || Ui.liberarEnvioIsolado === liberar) Ui.toast((erro as Error).message, true);
+    } finally {
+      liberar();
     }
   }
 
