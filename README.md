@@ -5,13 +5,14 @@ Aplicativo desktop de gestão de livros, autores, editoras, leitores, empréstim
 
 ## Como executar (Windows)
 
-1. `npm install`
-2. Copie `.env.example` para `.env` e preencha com os dados da sua conexão do Workbench (`DB_NAME=cl205299`). Se já tem um `.env` funcionando, mantenha-o.
-3. Um comando por vez:
+1. Crie ou escolha um banco MySQL no Workbench e confirme que o serviço está em execução.
+2. Copie `.env.example` para `.env` e preencha `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` e `DB_NAME` com os dados da conexão. Se já tem um `.env` funcionando, mantenha-o. Não publique esse arquivo.
+3. Na pasta do projeto, execute um comando por vez:
 
 ```powershell
-npm install
+npm ci
 npm run check
+npm test
 npm run db:setup
 npm start
 ```
@@ -38,12 +39,16 @@ O administrador acompanha o histórico em **Notificações → Lembretes de devo
 
 O Lumi evita repetir um lembrete para o mesmo empréstimo e a mesma data; um prazo renovado é tratado separadamente. Os avisos de reservas continuam manuais. O histórico dos lembretes fica no MySQL e não entra no backup JSON do aplicativo; preserve a tabela `lembretes_devolucao` no backup do banco ao migrar a instalação.
 
+Campos legados que o aplicativo não usa mais não entram em novos backups JSON. A atualização não apaga dados de tabelas já instaladas.
+
 Para validar a lógica sem conectar ao banco ou enviar mensagens reais, use `npm test`.
 
 ## Pesquisa bibliográfica no cadastro
 
-- **Por título:** o cadastro e a tela **Descobrir livros** consultam o Google Books e, quando faltam dados ou resultados, a Open Library. Confira ISBN, editora e ano antes de escolher. Resultados sem edição identificada são sinalizados; o ano e a capa de outras edições não são reaproveitados.
-- **Por ISBN:** o Lumi valida o dígito verificador, reconhece ISBN-10 e ISBN-13 equivalentes e consulta Open Library e Google Books. Se necessário, usa a BrasilAPI para buscar na Câmara Brasileira do Livro (CBL) e no Mercado Editorial. Só combina dados de fontes que confirmem o mesmo ISBN.
+- **Por título, autoria ou termo:** o Lumi consulta Google Books e Open Library em paralelo, e tenta o catálogo do Internet Archive se nenhuma das duas trouxer resultados. Em **Descobrir livros**, se não houver resultados externos, a pesquisa mostra os títulos correspondentes do acervo local, quando houver.
+- **Por ISBN:** a busca mostra os mesmos cartões da pesquisa por título. O Lumi valida o dígito verificador, reconhece ISBN-10 e ISBN-13 equivalentes e consulta Open Library e Google Books. Se necessário, usa a BrasilAPI para buscar na Câmara Brasileira do Livro (CBL) e no Mercado Editorial. ISBN igual com títulos incompatíveis não autoriza combinar dados.
+- **Editora, gênero e ano:** a editora pode ser preenchida por uma única fonte que identifique a edição; quando disponível, o Lumi prioriza a ficha da CBL ou do Mercado Editorial. Um gênero da fonte pode ser usado mesmo que ainda não exista no acervo. O ano é o da edição consultada, não o da primeira publicação da obra; quando não houver como confirmá-lo, preencha manualmente.
+- O ano mostrado como provisório após uma busca por título não é gravado sem confirmação pelo ISBN. Anos digitados manualmente não são substituídos.
 - As sugestões preenchem apenas campos vazios que não foram editados no formulário. A origem é exibida, e você pode completar os dados manualmente antes de salvar. As consultas são feitas no aplicativo; não exigem o OpenCode aberto.
 
 ## Requisitos do projeto final de DAD
@@ -51,8 +56,8 @@ Para validar a lógica sem conectar ao banco ou enviar mensagens reais, use `npm
 | Requisito | Onde está |
 | --- | --- |
 | ≥ 6 tabelas relacionadas | 10 tabelas relacionadas (`database/schema.sql`) |
-| CRUD completo de **todas** as entidades | Livros, autores, editoras, leitores, empréstimos, reservas, notificações e equipe: criar, listar, editar e excluir/encerrar (tabela abaixo) |
-| 4 situações de uso de API | Google Books, Open Library, ViaCEP, BrasilAPI (Axios, só no processo principal) |
+| CRUD por entidade | Cadastros principais têm CRUD. Empréstimos e reservas têm atualização de fluxo, não edição geral. Vínculos e lembretes não têm CRUD independente. Consulte a tabela abaixo. |
+| 4 situações de uso de API | Preencher cidade/UF pelo CEP, calcular prazo com feriados, descobrir livros por título e consultar uma edição pelo ISBN. O Resend é opcional. |
 | Segurança justificada | `docs/SEGURANCA.md` |
 | Código em classes (POO/MVC) | Model: `services/*`; Controller: `controllers/BibliotecaController.ts`; View: classes `Pagina*` no renderer |
 | Só TypeScript, HTML, CSS | Sem `.js` escritos à mão; Bootstrap como biblioteca |
@@ -70,7 +75,7 @@ Para validar a lógica sem conectar ao banco ou enviar mensagens reais, use `npm
 | Entidade | Criar | Ler | Editar | Excluir / encerrar |
 | --- | --- | --- | --- | --- |
 | Livros | cadastro (com ISBN/capa automáticos) | grade ou lista, detalhes | sim | arquivar/restaurar; excluir (admin, sem histórico) |
-| Autores / Editoras | sim | lista com nº de livros | sim | admin (autor ligado a livro é protegido) |
+| Autores / Editoras | sim | lista com nº de livros; em Autores, clique no número para abrir os títulos vinculados, inclusive arquivados | sim | admin (autor ligado a livro é protegido) |
 | Leitores | sim (CEP via ViaCEP) | lista + histórico | sim | desativar/reativar; excluir (admin, sem histórico) |
 | Empréstimos | sim (prazo em dias úteis via BrasilAPI) | filtros e atrasos | renovar / ajustar prazo | devolver; excluir (admin) |
 | Reservas | sim (fila) | posição na fila | reativar cancelada | cancelar; excluir (admin) |
@@ -85,7 +90,7 @@ Para validar a lógica sem conectar ao banco ou enviar mensagens reais, use `npm
 - Senha: o limite de 72 era em caracteres, mas o bcrypt trunca em **bytes**; usuário inexistente respondia mais rápido (revelava usuários); não havia expiração de sessão nem proteção do último administrador.
 - Menu nativo estava removido, impedindo DevTools em desenvolvimento; agora há menu (DevTools só fora do pacote).
 - Pesquisa na lista recriava a página a cada tecla (perdia o foco); agora só a tabela é atualizada.
-- Se a BrasilAPI estiver fora do ar, o prazo é calculado só com fins de semana e o usuário é avisado.
+- Se a BrasilAPI não retornar os feriados de um ano, nesse ano o prazo exclui apenas fins de semana. Feriados confirmados de outros anos são preservados.
 
 ## Estrutura
 
@@ -118,3 +123,12 @@ Para começar, peça: “Proponha a primeira etapa para revisar o fluxo de empr�
 - `Table ... doesn't exist`: rode `npm run db:setup`.
 - `ISBN não encontrado`: tente *Buscar pelo título* ou preencha manualmente.
 - API externa limitada (429): aguarde ou informe `GOOGLE_BOOKS_API_KEY` no `.env`.
+
+## Roteiro rápido de apresentação
+
+Use um banco de demonstração e cadastros fictícios. Depois de instalar em uma pasta limpa, entre no Lumi e confira **Notificações** e **Acervo**.
+
+1. **Leitores:** consulte um CEP para preencher cidade e UF.
+2. **Empréstimos:** calcule um prazo em dias úteis e confira o aviso se o serviço de feriados estiver indisponível.
+3. **Descobrir livros:** pesquise um título e escolha uma edição nos resultados.
+4. **Consulta por ISBN:** informe um ISBN válido, confira a editora, o gênero e o ano da edição e aproveite os dados no cadastro.
