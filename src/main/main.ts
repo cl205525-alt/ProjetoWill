@@ -10,7 +10,6 @@ import { LembretesDevolucaoService } from './services/LembretesDevolucaoService'
 import { LembretesDevolucaoRepositorio, tabelaLembretesAusente } from './repositorios/LembretesDevolucaoRepositorio';
 import { BibliotecaController } from './controllers/BibliotecaController';
 
-/** Ponto de entrada: janela, menu nativo, notificações do sistema e política de segurança. */
 class Aplicacao {
   private janela: BrowserWindow | null = null;
   private readonly circulacao = new CirculacaoService();
@@ -27,7 +26,7 @@ class Aplicacao {
   iniciar(): void {
     if (!app.requestSingleInstanceLock()) { app.quit(); return; }
     app.on('second-instance', () => { if (this.janela) { if (this.janela.isMinimized()) this.janela.restore(); this.janela.focus(); } });
-    app.setAppUserModelId('br.cotil.lumi'); // necessário para notificações no Windows
+    app.setAppUserModelId('br.cotil.lumi');
     this.endurecerSeguranca();
     this.controller.registrar();
     app.whenReady().then(() => {
@@ -87,7 +86,6 @@ class Aplicacao {
     janela.on('closed', () => { if (this.janela === janela) this.janela = null; });
   }
 
-  /** Notificação nativa do sistema operacional quando um livro reservado fica disponível. */
   private notificarSistema(aviso: AvisoFila): void {
     if (!Notification.isSupported()) return;
     new Notification({ title: 'Lumi · Reserva disponível', body: `"${aviso.livro}" está disponível para ${aviso.leitor}. Avise o leitor.` }).show();
