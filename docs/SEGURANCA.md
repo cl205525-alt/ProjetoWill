@@ -5,7 +5,7 @@ Cada decisão abaixo responde ao requisito "segurança justificada" do projeto f
 | Risco | Decisão no código | Por quê |
 | --- | --- | --- |
 | Código remoto/Node no renderer | `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`; o `preload.ts` expõe a chamada IPC e inscrições em canais fixos | Se a tela fosse comprometida, ela não teria acesso ao Node, ao MySQL nem ao `.env` |
-| Chamadas IPC forjadas | O controller só atende ações de uma tabela fixa e confere que o `senderFrame` é o nosso `index.html` | Impede executar operações arbitrárias ou vindas de outra página |
+| Origem do IPC | O controller oferece uma tabela fixa de ações e valida a janela, o frame principal e a URL exata do `index.html` | Restringe as operações ao processo de interface esperado; a autorização por perfil continua separada |
 | Acesso sem permissão | Cada rota declara `publica`, `logado` ou `admin`; exclusões e gestão de equipe são só de administrador, verificadas no processo principal | O renderer pode ser adulterado; a regra precisa morar no main |
 | SQL Injection | Todas as consultas usam parâmetros `?` (mysql2 `execute`) e todos os dados passam por `Validacao` | O banco nunca interpreta texto digitado como SQL |
 | XSS | Textos são inseridos com `textContent` ou `.value` quando possível; em modelos HTML, `Util.esc` protege texto e atributos entre aspas. Os componentes `Html` recebem os textos originais e fazem o escape na saída, não na gravação. A CSP continua restritiva. | Tags digitadas são exibidas literalmente, sem transformar o conteúdo salvo nem interpretar a entrada como marcação |
