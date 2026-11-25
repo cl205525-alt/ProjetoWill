@@ -8,15 +8,9 @@ export interface UsuarioSessao { id: number; nome: string; usuario: string; perf
 interface Colaborador extends RowDataPacket { id: number; nome: string; usuario: string; senha_hash: string; perfil: Perfil; ativo: number; }
 
 const CUSTO_BCRYPT = 12;
-const OCIOSIDADE_MAXIMA_MS = 30 * 60 * 1000; // a sessão expira após 30 min sem uso
+const OCIOSIDADE_MAXIMA_MS = 30 * 60 * 1000;
 const PADRAO_USUARIO = /^[a-z0-9._-]{3,60}$/;
 
-/**
- * Autenticação e gestão da equipe.
- * Decisões de segurança: hash bcrypt (custo 12), bloqueio após 5 erros, expiração por
- * inatividade, tempo de resposta igualado quando o usuário não existe e proteção
- * contra remoção do último administrador.
- */
 export class AutenticacaoService {
   private sessao: UsuarioSessao | null = null;
   private ultimoAcesso = 0;
@@ -34,7 +28,6 @@ export class AutenticacaoService {
     return true;
   }
 
-  /** Garante login (e, opcionalmente, perfil de administrador). Lança erro se não houver permissão. */
   exigir(perfil?: Perfil, contarAtividade = true): UsuarioSessao {
     if (!this.sessaoValida() || !this.sessao) throw new ErroDominio('Sessão encerrada. Faça login novamente.', 'SESSAO');
     if (perfil && this.sessao.perfil !== perfil) throw new ErroDominio('Apenas administradores podem realizar esta ação.');
@@ -65,14 +58,14 @@ export class AutenticacaoService {
   async entrar(dados: unknown): Promise<UsuarioSessao> {
     const d = V.objeto(dados);
     const usuario = V.texto(d.usuario, 'usuário', 60).toLowerCase();
-    // A senha não é aparada: espaços podem fazer parte dela.
+
     const senha = typeof d.senha === 'string' && d.senha.length <= 200 ? d.senha : '';
     const estado = this.tentativas.get(usuario) ?? { numero: 0, bloqueioAte: 0 };
     if (estado.bloqueioAte > Date.now()) {
       throw new ErroDominio(`Muitas tentativas. Aguarde ${Math.ceil((estado.bloqueioAte - Date.now()) / 1000)} segundos.`);
     }
     const [registro] = await Conexao.consultar<Colaborador>('SELECT * FROM colaboradores WHERE usuario=? AND ativo=1 LIMIT 1', [usuario]);
-    // Compara sempre com algum hash: evita descobrir usuários existentes pelo tempo de resposta.
+
     const alvo = registro ? registro.senha_hash : await this.obterHashFalso();
     const correto = (await bcrypt.compare(senha, alvo)) && !!registro;
     if (!correto) {
