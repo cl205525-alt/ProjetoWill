@@ -1,7 +1,6 @@
 import { cpSync, copyFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-// Copia HTML, CSS e as bibliotecas (Bootstrap) para dist/renderer. A lógica continua toda em TypeScript.
 const raiz = resolve(__dirname, '../..');
 const destino = join(raiz, 'dist', 'renderer');
 const vendor = join(destino, 'vendor');
