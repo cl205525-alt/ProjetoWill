@@ -10,7 +10,7 @@
     "dev": "npm run start",
     "db:setup": "npm run build && node dist/main/configurarBanco.js",
     "check": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
-    "test": "tsc -p tests/tsconfig.json && node --test dist/test/tests/lembretes.test.js dist/test/tests/escape-html.test.js dist/test/tests/pesquisa-bibliografica.test.js"
+    "test": "tsc -p tests/tsconfig.json && node --test dist/test/tests/lembretes.test.js dist/test/tests/escape-html.test.js dist/test/tests/pesquisa-bibliografica.test.js dist/test/tests/cadastro-livro.test.js"
   },
   "dependencies": {
     "axios": "^1.8.4",
