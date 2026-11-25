@@ -4,7 +4,6 @@ import { Conexao } from '../conexao';
 import { ErroDominio, Validacao as V } from '../validacao';
 import { tabelaLembretesAusente } from '../repositorios/LembretesDevolucaoRepositorio';
 
-/** Aviso gerado quando um exemplar reservado fica disponível (vira notificação interna e do sistema). */
 export interface AvisoFila { reservaId: number; leitorId: number; leitor: string; livro: string; }
 export interface ResumoNotificacoes { itens: RowDataPacket[]; pendentes: number; }
 
@@ -22,14 +21,8 @@ const AVISOS_DEVOLUCAO = `SELECT d.id, 'devolucao' AS tipo, d.lida, d.criada_em,
 
 const ORDEM_AVISOS = 'ORDER BY lida ASC, criada_em DESC, id DESC';
 
-/**
- * Circulação: empréstimos, devoluções, reservas (fila) e notificações.
- * Toda movimentação de estoque ocorre em transação, travando primeiro a linha do livro
- * (mesma ordem de locks em todos os métodos para evitar deadlocks).
- * Emite o evento 'reserva-disponivel' DEPOIS do commit.
- */
 export class CirculacaoService extends EventEmitter {
-  // ---------- Leitura ----------
+
   async emprestimos(): Promise<RowDataPacket[]> {
     return Conexao.consultar<RowDataPacket>(`SELECT em.*, l.titulo AS livro, l.capa_url, l.isbn, p.nome AS leitor, c.nome AS atendente,
       CASE WHEN em.data_devolucao IS NOT NULL THEN 'devolvido'
@@ -82,7 +75,6 @@ export class CirculacaoService extends EventEmitter {
     return stats;
   }
 
-  /** Dados agregados (SQL) para os gráficos da visão geral. */
   async graficos(): Promise<Record<string, unknown>> {
     const porMes = await Conexao.consultar<RowDataPacket>(`SELECT DATE_FORMAT(data_retirada,'%Y-%m') AS mes, COUNT(*) AS total
       FROM emprestimos WHERE data_retirada >= DATE_SUB(DATE_FORMAT(CURDATE(),'%Y-%m-01'), INTERVAL 5 MONTH)
@@ -111,7 +103,6 @@ export class CirculacaoService extends EventEmitter {
     };
   }
 
-  // ---------- Estoque ----------
   private async disponibilidade(conn: PoolConnection, livroId: number): Promise<{ total: number; ativas: number; separadas: number }> {
     const [r] = await conn.query<RowDataPacket[]>(`SELECT
       (SELECT COUNT(*) FROM emprestimos WHERE livro_id=? AND data_devolucao IS NULL) AS ativas,
@@ -121,7 +112,6 @@ export class CirculacaoService extends EventEmitter {
     return { total: Number(l[0].quantidade), ativas: Number(r[0].ativas), separadas: Number(r[0].separadas) };
   }
 
-  /** Promove, em ordem, quem está na fila enquanto houver exemplares livres. Rode dentro de uma transação. */
   async disponibilizarFila(conn: PoolConnection, livroId: number): Promise<AvisoFila[]> {
     const avisos: AvisoFila[] = [];
     for (;;) {
@@ -143,7 +133,6 @@ export class CirculacaoService extends EventEmitter {
     for (const aviso of avisos) this.emit('reserva-disponivel', aviso);
   }
 
-  /** Trava o livro do empréstimo/reserva informado (padroniza a ordem dos locks). */
   private async travarLivroDe(conn: PoolConnection, tabela: 'emprestimos' | 'reservas', id: number, rotulo: string): Promise<number> {
     const [ref] = await conn.query<RowDataPacket[]>(`SELECT livro_id FROM ${tabela} WHERE id=?`, [id]);
     if (!ref.length) throw new ErroDominio(`${rotulo} não encontrado(a).`);
@@ -152,7 +141,6 @@ export class CirculacaoService extends EventEmitter {
     return livroId;
   }
 
-  // ---------- Empréstimos ----------
   async emprestar(dados: unknown, colaboradorId: number): Promise<void> {
     const d = V.objeto(dados);
     const livroId = V.inteiro(d.livro_id, 'livro');
@@ -180,7 +168,7 @@ export class CirculacaoService extends EventEmitter {
         await conn.execute("UPDATE reservas SET status='concluida' WHERE id=?", [minhaReserva[0].id]);
         await conn.execute('UPDATE notificacoes SET lida=1 WHERE reserva_id=?', [minhaReserva[0].id]);
       }
-      // Quem já estava na fila e pegou o livro direto não deve continuar "aguardando".
+
       await conn.execute("UPDATE reservas SET status='concluida' WHERE livro_id=? AND leitor_id=? AND status='aguardando'", [livroId, leitorId]);
     });
   }
@@ -198,7 +186,6 @@ export class CirculacaoService extends EventEmitter {
     this.emitirAvisos(avisos);
   }
 
-  /** Update: renovar/ajustar o prazo de um empréstimo em aberto. */
   async renovar(dados: unknown): Promise<void> {
     const d = V.objeto(dados);
     const id = V.inteiro(d.id, 'empréstimo');
@@ -228,7 +215,6 @@ export class CirculacaoService extends EventEmitter {
     this.emitirAvisos(avisos);
   }
 
-  // ---------- Reservas ----------
   async reservar(dados: unknown): Promise<void> {
     const d = V.objeto(dados);
     const livroId = V.inteiro(d.livro_id, 'livro');
@@ -263,7 +249,6 @@ export class CirculacaoService extends EventEmitter {
     this.emitirAvisos(avisos);
   }
 
-  /** Update: devolve uma reserva cancelada ao fim da fila. */
   async reativarReserva(idDado: unknown): Promise<void> {
     const id = V.inteiro(idDado, 'reserva');
     const avisos = await Conexao.transacao(async conn => {
@@ -299,7 +284,6 @@ export class CirculacaoService extends EventEmitter {
     this.emitirAvisos(avisos);
   }
 
-  // ---------- Notificações ----------
   async marcarNotificacao(idDado: unknown): Promise<void> {
     await Conexao.executar('UPDATE notificacoes SET lida=1 WHERE id=?', [V.inteiro(idDado, 'notificação')]);
   }
