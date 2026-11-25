@@ -1,4 +1,7 @@
 import { BrowserWindow, ipcMain, IpcMainInvokeEvent } from 'electron';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { isAxiosError } from 'axios';
 import { AutenticacaoService, UsuarioSessao } from '../services/AutenticacaoService';
 import { CadastroService } from '../services/CadastroService';
 import { CirculacaoService } from '../services/CirculacaoService';
@@ -13,10 +16,6 @@ type Executor = (dados: unknown, ctx: ContextoRota) => unknown | Promise<unknown
 type Acesso = 'publica' | 'logado' | 'admin';
 interface Rota { acesso: Acesso; executar: Executor; contarAtividade: boolean; }
 
-/**
- * Controller (o "C" do MVC): recebe as ações do renderer, confere permissões numa
- * tabela única e delega aos serviços (Model). O renderer (View) nunca fala com o banco.
- */
 export class BibliotecaController {
   private readonly rotas = new Map<string, Rota>();
 
@@ -37,67 +36,69 @@ export class BibliotecaController {
 
   private definirRotas(): void {
     const a = this.auth, c = this.cadastros, ci = this.circulacao, api = this.apis, f = this.arquivos;
-    // Autenticação
+
     this.rota('auth:status', 'publica', () => a.estado());
     this.rota('auth:setup', 'publica', d => a.configurar(d));
     this.rota('auth:login', 'publica', d => a.entrar(d));
     this.rota('auth:logout', 'publica', () => { a.sair(); return null; });
     this.rota('auth:password', 'logado', d => a.alterarSenha(d));
-    // Equipe (apenas administradores)
+
     this.rota('staff:list', 'admin', () => a.listarEquipe());
     this.rota('staff:create', 'admin', d => a.criarColaborador(d));
     this.rota('staff:update', 'admin', d => a.atualizarColaborador(d));
     this.rota('staff:delete', 'admin', d => a.excluirColaborador(d));
-    // Painel
+
     this.rota('dashboard:stats', 'logado', () => ci.painel());
     this.rota('dashboard:charts', 'logado', () => ci.graficos());
-    // Livros
+
     this.rota('books:list', 'logado', () => c.livros());
     this.rota('books:save', 'logado', d => c.salvarLivro(d));
     this.rota('books:archive', 'admin', d => c.arquivarLivro(d));
     this.rota('books:restore', 'admin', d => c.restaurarLivro(d));
     this.rota('books:delete', 'admin', d => c.excluirLivro(d));
-    // Autores
+
     this.rota('authors:list', 'logado', () => c.autores());
     this.rota('authors:save', 'logado', d => c.salvarAutor(d));
     this.rota('authors:delete', 'admin', d => c.excluirAutor(d));
-    // Editoras
+
     this.rota('publishers:list', 'logado', () => c.editoras());
     this.rota('publishers:save', 'logado', d => c.salvarEditora(d));
     this.rota('publishers:delete', 'admin', d => c.excluirEditora(d));
-    // Leitores
+
     this.rota('readers:list', 'logado', () => c.leitores());
     this.rota('readers:save', 'logado', d => c.salvarLeitor(d));
     this.rota('readers:disable', 'admin', d => c.desativarLeitor(d));
     this.rota('readers:enable', 'admin', d => c.reativarLeitor(d));
     this.rota('readers:delete', 'admin', d => c.excluirLeitor(d));
-    // Empréstimos
+
     this.rota('loans:list', 'logado', () => ci.emprestimos());
     this.rota('loans:borrow', 'logado', (d, ctx) => ci.emprestar(d, ctx.pessoa!.id));
     this.rota('loans:return', 'logado', d => ci.devolver(d));
     this.rota('loans:renew', 'logado', d => ci.renovar(d));
     this.rota('loans:delete', 'admin', d => ci.excluirEmprestimo(d));
-    // Reservas
+
     this.rota('reservations:list', 'logado', () => ci.reservas());
     this.rota('reservations:create', 'logado', d => ci.reservar(d));
     this.rota('reservations:cancel', 'logado', d => ci.cancelarReserva(d));
     this.rota('reservations:reactivate', 'logado', d => ci.reativarReserva(d));
     this.rota('reservations:delete', 'admin', d => ci.excluirReserva(d));
-    // Notificações
-    // Também é consultada em segundo plano; não deve adiar a expiração da sessão.
+
     this.rota('notifications:list', 'logado', (_d, ctx) => ci.notificacoes(ctx.pessoa?.perfil === 'admin'), false);
     this.rota('notifications:read', 'logado', d => ci.marcarNotificacao(d));
     this.rota('notifications:read-reminder', 'admin', d => ci.marcarLembrete(d));
     this.rota('notifications:readall', 'logado', (_d, ctx) => ci.marcarTodasNotificacoes(ctx.pessoa?.perfil === 'admin'));
     this.rota('notifications:delete', 'logado', d => ci.excluirNotificacao(d));
-    // APIs externas
+
     this.rota('apis:google', 'logado', d => api.googleBooks(d));
     this.rota('apis:titulo', 'logado', d => api.buscarTitulo(d));
     this.rota('apis:isbn', 'logado', d => api.openLibrary(d));
+    this.rota('apis:publisher-fallback', 'logado', d => api.buscarEditoraPorIsbn(d), false);
+    this.rota('apis:genre-fallback', 'logado', d => api.buscarGeneroPorIsbn(d), false);
     this.rota('apis:cover', 'logado', d => api.obterCapa(d));
+    this.rota('apis:cover-fallback', 'logado', d => api.obterCapaAlternativa(d), false);
     this.rota('apis:cep', 'logado', d => api.viaCep(d));
     this.rota('apis:holidays', 'logado', d => api.calcularPrazo(d));
-    // Arquivos
+
     this.rota('files:report', 'logado', (d, ctx) => f.exportarRelatorio(ctx.janela, d));
     this.rota('files:backup-export', 'admin', (_d, ctx) => f.exportarBackup(ctx.janela));
     this.rota('files:backup-import', 'admin', (_d, ctx) => f.importarBackup(ctx.janela));
@@ -107,10 +108,12 @@ export class BibliotecaController {
     ipcMain.handle(CANAL_IPC, (evento, acao: unknown, dados: unknown) => this.tratar(evento, acao, dados));
   }
 
-  /** Só aceita chamadas vindas da nossa própria página (checklist de segurança do Electron). */
   private origemConfiavel(evento: IpcMainInvokeEvent): boolean {
-    const url = evento.senderFrame?.url ?? '';
-    return url.startsWith('file://') && /\/renderer\/index\.html$/.test(url.split(/[?#]/)[0]);
+    const janela = this.obterJanela();
+    if (!janela || janela.isDestroyed() || evento.sender !== janela.webContents) return false;
+    const frame = evento.senderFrame;
+    const urlEsperada = pathToFileURL(resolve(__dirname, '../../renderer/index.html')).href;
+    return !!frame && frame === janela.webContents.mainFrame && frame.url.split(/[?#]/, 1)[0] === urlEsperada;
   }
 
   async tratar(evento: IpcMainInvokeEvent | null, acao: unknown, dados: unknown): Promise<{ ok: boolean; data?: unknown; error?: string; codigo?: string }> {
@@ -127,9 +130,8 @@ export class BibliotecaController {
     }
   }
 
-  /** Traduz erros técnicos em mensagens seguras: nunca expõe stack, SQL ou credenciais ao renderer. */
   private responderErro(erro: unknown, acao: unknown): { ok: false; error: string; codigo?: string } {
-    const e = erro as Error & { code?: string; response?: { status?: number } };
+    const e = (erro ?? {}) as Error & { code?: string; response?: { status?: number } };
     let mensagem = 'Não foi possível concluir a operação. Confira os dados e a conexão com o MySQL.';
     if (erro instanceof ErroDominio) return { ok: false, error: erro.message, codigo: erro.codigo };
     if (e.code === 'ER_DUP_ENTRY') mensagem = 'Já existe um cadastro com esse nome, usuário ou ISBN.';
@@ -139,11 +141,11 @@ export class BibliotecaController {
     else if (e.code === 'ER_NO_SUCH_TABLE') mensagem = 'As tabelas ainda não existem. Execute "npm run db:setup".';
     else if (e.code === 'ER_ACCESS_DENIED_ERROR') mensagem = 'O MySQL recusou o usuário ou a senha. Confira o arquivo .env.';
     else if (e.code === 'ER_BAD_DB_ERROR') mensagem = 'O banco de dados informado no .env não existe.';
+    else if (isAxiosError(erro) && e.response?.status === 404) mensagem = 'Nenhum registro encontrado na API externa para esta consulta.';
+    else if (isAxiosError(erro) && e.response?.status === 429) mensagem = 'A API externa limitou as consultas por agora. Aguarde um pouco e tente de novo.';
+    else if (isAxiosError(erro)) mensagem = 'A API externa não respondeu. Confira a internet e tente novamente.';
     else if (e.code === 'ECONNREFUSED' || e.code === 'ETIMEDOUT') mensagem = 'Não foi possível conectar ao MySQL. Verifique o serviço e o arquivo .env.';
-    else if (e.name === 'AxiosError' && e.response?.status === 404) mensagem = 'Nenhum registro encontrado na API externa para esta consulta.';
-    else if (e.name === 'AxiosError' && e.response?.status === 429) mensagem = 'A API externa limitou as consultas por agora. Aguarde um pouco e tente de novo.';
-    else if (e.name === 'AxiosError') mensagem = 'A API externa não respondeu. Confira a internet e tente novamente.';
-    console.error('[Biblioteca] Falha de operação:', acao, e.code || e.name);
+    console.error('[Biblioteca] Falha de operação:', acao, e.code || e.name || 'erro desconhecido');
     return { ok: false, error: mensagem };
   }
 }
