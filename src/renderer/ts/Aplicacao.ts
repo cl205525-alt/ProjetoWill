@@ -1,48 +1,16 @@
-/** Orquestra login, navegação entre páginas, eventos globais e tema. */
 class Aplicacao {
-  private readonly estado = new Estado();
+  private estado = new Estado();
   private usuarioAtual: Registro | null = null;
   private primeiraConfiguracao = false;
   private paginas = new Map<IdPagina, PaginaBase>();
   private atual: IdPagina = 'dashboard';
-  private carregando = false;
-  private atualizandoAvisos = false;
-
-  private async sincronizarAvisos(): Promise<void> {
-    if (!this.usuarioAtual || this.carregando || this.atualizandoAvisos) return;
-
-    const usuario = this.usuarioAtual;
-    this.atualizandoAvisos = true;
-
-    try {
-      const [avisos, stats] = await Promise.all([
-        Api.chamar<Registro[]>('notifications:list'),
-        Api.chamar<Registro>('dashboard:stats')
-      ]);
-
-      if (this.usuarioAtual !== usuario || this.carregando) return;
-
-      const mudou = JSON.stringify(avisos) !== JSON.stringify(this.estado.notificacoes);
-      this.estado.notificacoes = avisos;
-      this.estado.stats = stats;
-      this.atualizarBadges();
-
-      if (mudou && this.atual === 'notifications') {
-        (this.paginas.get('notifications') as PaginaNotificacoes)?.atualizarAvisos();
-      }
-
-      if (mudou && this.atual === 'dashboard') {
-        this.renderizar();
-      }
-    } catch {
-      // A proxima consulta tentara atualizar novamente.
-    } finally {
-      this.atualizandoAvisos = false;
-    }
-  }
+  private revisaoAcervo = 0;
+  private recargaEmCurso?: { revisaoAcervo: number; resultado: Promise<void> };
+  private readonly capasEmCurso = new Map<string, Promise<string | null>>();
+  private readonly capasRecuperadas = new Map<string, string>();
 
   private readonly ctx: Contexto = {
-    estado: this.estado,
+    get estado(): Estado { return app().estado; },
     get usuario(): Registro { return app().usuarioAtual ?? {}; },
     get ehAdmin(): boolean { return app().usuarioAtual?.perfil === 'admin'; },
     recarregar: () => this.recarregar(),
@@ -61,25 +29,32 @@ class Aplicacao {
     document.addEventListener('input', e => this.entrada(e));
     document.addEventListener('keydown', e => { if (e.ctrlKey && e.key.toLowerCase() === 'k') { e.preventDefault(); document.querySelector<HTMLInputElement>('#global-search')?.focus(); } });
     document.addEventListener('error', e => void this.erroCapa(e), true);
+    document.addEventListener('load', e => {
+      const img = e.target;
+      if (img instanceof HTMLImageElement && img.dataset.coverUrl) {
+        this.informarPreviaRecuperada(img, img.dataset.coverUrl);
+      }
+    }, true);
+    this.observarCapasPesquisa();
     window.biblioteca.aoMenu(acao => void this.acaoMenu(acao));
+    window.biblioteca.aoAtualizarNotificacoes(() => {
+      if (this.usuarioAtual?.perfil === 'admin') void this.atualizarNotificacoes();
+    });
     void this.inicializar();
-    window.setInterval(() => void this.sincronizarAvisos(), 15000);
   }
 
-  // ---------- Tema ----------
   private lerTema(): 'light' | 'dark' {
-    try { if (localStorage.getItem('lumi-tema') === 'dark') return 'dark'; } catch { /* sem armazenamento */ }
+    try { if (localStorage.getItem('lumi-tema') === 'dark') return 'dark'; } catch {   }
     return 'light';
   }
   private aplicarTema(tema: 'light' | 'dark'): void {
     document.documentElement.setAttribute('data-bs-theme', tema);
     const icone = document.querySelector('#tema-icone');
     if (icone) icone.className = `bi bi-${tema === 'dark' ? 'sun' : 'moon-stars'}`;
-    try { localStorage.setItem('lumi-tema', tema); } catch { /* ignora */ }
+    try { localStorage.setItem('lumi-tema', tema); } catch {   }
   }
   private alternarTema(): void { this.aplicarTema(document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark'); }
 
-  // ---------- Autenticação ----------
   private async inicializar(): Promise<void> {
     try {
       const estado = await Api.chamar<{ necessitaConfiguracao: boolean; usuario: Registro | null }>('auth:status');
@@ -91,6 +66,12 @@ class Aplicacao {
 
   private mostrarAutenticacao(erro = ''): void {
     this.usuarioAtual = null;
+    this.paginas.clear();
+    this.estado = new Estado();
+    this.recargaEmCurso = undefined;
+    ++this.revisaoAcervo;
+    this.capasEmCurso.clear();
+    this.capasRecuperadas.clear();
     document.querySelectorAll('.modal.show').forEach(m => bootstrap.Modal.getOrCreateInstance(m).hide());
     document.querySelector('#auth-shell')!.classList.remove('d-none');
     document.querySelector('#app-shell')!.classList.add('d-none');
@@ -129,16 +110,17 @@ class Aplicacao {
   }
 
   private async sair(): Promise<void> {
-    try { await Api.chamar('auth:logout'); } catch { /* já saiu */ }
+    try { await Api.chamar('auth:logout'); } catch {   }
     this.paginas.clear();
     this.mostrarAutenticacao();
   }
 
-  // ---------- Shell ----------
   private async mostrarSistema(): Promise<void> {
+    const usuario = this.usuarioAtual;
     const u = this.usuarioAtual ?? {};
+    const livros = new PaginaLivros(this.ctx, (pagina, formularioAtual) => this.recarregarAcervo(pagina, formularioAtual));
     this.paginas = new Map<IdPagina, PaginaBase>([
-      new PaginaDashboard(this.ctx), new PaginaLivros(this.ctx), new PaginaEmprestimos(this.ctx), new PaginaReservas(this.ctx), new PaginaLeitores(this.ctx),
+      new PaginaDashboard(this.ctx), livros, new PaginaEmprestimos(this.ctx), new PaginaReservas(this.ctx), new PaginaLeitores(this.ctx),
       new PaginaAutores(this.ctx), new PaginaEditoras(this.ctx), new PaginaExplorar(this.ctx), new PaginaNotificacoes(this.ctx), new PaginaRelatorios(this.ctx), new PaginaEquipe(this.ctx)
     ].map(p => [p.id, p] as [IdPagina, PaginaBase]));
     document.querySelector('#auth-shell')!.classList.add('d-none');
@@ -150,25 +132,59 @@ class Aplicacao {
     document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('d-none', u.perfil !== 'admin'));
     document.querySelector('#today')!.textContent = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date());
     await this.recarregar(false);
-    this.navegar('dashboard');
+    if (usuario && this.usuarioAtual === usuario) this.navegar('dashboard');
+  }
+
+  private iniciarRecarga() {
+    const revisaoAcervo = this.revisaoAcervo;
+    const estado = this.estado;
+    const resultado = estado.carregar(this.usuarioAtual?.perfil === 'admin')
+      .then(() => { if (this.estado === estado) this.atualizarBadges(); })
+      .finally(() => { if (this.recargaEmCurso?.resultado === resultado) this.recargaEmCurso = undefined; });
+    return this.recargaEmCurso = { revisaoAcervo, resultado };
   }
 
   async recarregar(redesenhar = true): Promise<void> {
-    if (this.carregando) return;
-    this.carregando = true;
+    if (this.recargaEmCurso) return;
+    const rodada = this.iniciarRecarga();
     try {
-      await this.estado.carregar(this.usuarioAtual?.perfil === 'admin');
-      this.atualizarBadges();
-    } catch (e) { Ui.toast((e as Error).message, true); } finally { this.carregando = false; }
-    if (redesenhar) this.renderizar();
+      await rodada.resultado;
+    } catch (e) {
+      if (rodada.revisaoAcervo === this.revisaoAcervo) Ui.toast((e as Error).message, true);
+    }
+    if (redesenhar && rodada.revisaoAcervo === this.revisaoAcervo) this.renderizar();
+  }
+
+  private async recarregarAcervo(pagina: PaginaLivros, formularioAtual?: () => boolean): Promise<boolean> {
+    const vigente = (): boolean => !!this.usuarioAtual && this.paginas.get('books') === pagina;
+    if (!vigente()) return false;
+    if (formularioAtual) ++this.revisaoAcervo;
+    while (vigente()) {
+
+      const rodada = this.recargaEmCurso ?? this.iniciarRecarga();
+      const atualizada = await rodada.resultado.then(() => true, () => false);
+
+      if (rodada.revisaoAcervo !== this.revisaoAcervo) continue;
+      if (!vigente()) return false;
+      pagina.informarRecarga(atualizada);
+      if (atualizada) {
+        if (formularioAtual?.() && !document.querySelector('#page-content')?.contains(document.activeElement)) this.renderizar();
+        else if (this.atual === 'books') pagina.atualizarListaPreservandoFoco();
+      }
+      return atualizada;
+    }
+    return false;
   }
 
   private atualizarBadges(): void {
     const s = this.estado.stats;
     const badge = (id: string, n: number): void => { const el = document.getElementById(id)!; el.textContent = String(n); el.classList.toggle('d-none', n === 0); };
     badge('side-reserves', Util.numero(s.reservas) + Util.numero(s.retiradas));
-    badge('side-notifs', Util.numero(s.avisos));
-    document.querySelector('#notif-dot')!.classList.toggle('d-none', !Util.numero(s.avisos));
+    const pendentes = this.estado.notificacoesPendentes;
+    badge('side-notifs', pendentes);
+    document.querySelector('#notif-dot')!.classList.toggle('d-none', pendentes === 0);
+    const cartao = document.querySelector('.stat-card[data-page="notifications"] strong');
+    if (cartao) cartao.textContent = Util.milhar(pendentes);
   }
 
   private navegar(id: IdPagina): void {
@@ -177,11 +193,30 @@ class Aplicacao {
     if (!pagina) return;
     this.atual = id;
     pagina.reiniciar();
-    document.querySelectorAll<HTMLElement>('.side-link[data-page]').forEach(e => e.classList.toggle('active', e.dataset.page === id));
+    document.querySelectorAll<HTMLElement>('.side-link[data-page]').forEach(e => {
+      const ativa = e.dataset.page === id;
+      e.classList.toggle('active', ativa);
+      if (ativa) e.setAttribute('aria-current', 'page');
+      else e.removeAttribute('aria-current');
+    });
     document.querySelector<HTMLInputElement>('#global-search')!.value = '';
     document.querySelector('#breadcrumb')!.textContent = `Biblioteca / ${pagina.nome}`;
     this.renderizar();
     document.querySelector('#page-content')!.scrollTop = 0;
+    if (id === 'notifications') void this.atualizarNotificacoes(true);
+  }
+
+  private async atualizarNotificacoes(mostrarErro = false): Promise<void> {
+    const usuario = this.usuarioAtual;
+    if (!usuario) return;
+    try {
+      if (!(await this.estado.carregarNotificacoes()) || this.usuarioAtual !== usuario) return;
+      this.atualizarBadges();
+      const pagina = this.paginas.get(this.atual);
+      if (pagina instanceof PaginaNotificacoes) pagina.atualizarAvisos();
+    } catch (erro) {
+      if (mostrarErro && this.usuarioAtual === usuario) Ui.toast((erro as Error).message, true);
+    }
   }
 
   private renderizar(): void {
@@ -192,7 +227,6 @@ class Aplicacao {
     pagina.montar();
   }
 
-  // ---------- Eventos ----------
   private async clique(e: Event): Promise<void> {
     const alvo = e.target as HTMLElement;
     const link = alvo.closest<HTMLElement>('[data-page]');
@@ -226,7 +260,7 @@ class Aplicacao {
     const bruto = el.dataset.input;
     const [prefixo, nome] = bruto.includes('.') ? bruto.split('.') : [this.atual, bruto];
     if (nome === 'busca') {
-      // Mantém a busca do topo e a da lista sincronizadas.
+
       const outro = document.querySelector<HTMLInputElement>(el.id === 'global-search' ? '#busca-local' : '#global-search');
       if (outro) outro.value = el.value;
     }
@@ -250,7 +284,6 @@ class Aplicacao {
     } catch (erro) { Ui.toast((erro as Error).message, true); }
   }
 
-  /** Alterar a própria senha (qualquer perfil). */
   private abrirPerfil(): void {
     const u = this.usuarioAtual ?? {};
     Ui.abrirFormulario({
@@ -268,18 +301,118 @@ class Aplicacao {
     });
   }
 
-  // ---------- Capas (imagens) ----------
-  /** Se a imagem remota falhar, o main baixa por Axios (domínio/tipo/tamanho validados); sem isso, mostra o ícone. */
+  private observarCapasPesquisa(): void {
+    const seletor = '[data-cover-fallback]';
+
+    const observar = new MutationObserver(mudancas => {
+      for (const mudanca of mudancas) for (const no of mudanca.addedNodes) {
+        if (!(no instanceof HTMLElement) || !no.isConnected) continue;
+        if (no.matches(seletor)) this.iniciarCapaAusente(no);
+        no.querySelectorAll<HTMLElement>(seletor).forEach(el => this.iniciarCapaAusente(el));
+      }
+    });
+    document.querySelectorAll('#page-content, #modal-fields').forEach(raiz => observar.observe(raiz, { childList: true, subtree: true }));
+  }
+
+  private iniciarCapaAusente(marcador: HTMLElement): void {
+    const isbn = marcador.dataset.coverFallback;
+    if (!isbn) return;
+    delete marcador.dataset.coverFallback;
+    void this.recuperarCapaPesquisa(marcador, isbn);
+  }
+
+  private consultarCapa(acao: string, dados: unknown): Promise<string | null> {
+    const chave = JSON.stringify([acao, dados]);
+    const recuperada = this.capasRecuperadas.get(chave);
+    if (recuperada) return Promise.resolve(recuperada);
+    const emCurso = this.capasEmCurso.get(chave);
+    if (emCurso) return emCurso;
+    const consulta = Api.chamar<string | null>(acao, dados)
+      .then(async src => {
+        if (typeof src !== 'string' || !/^data:image\/(?:jpeg|png|webp|gif);base64,/i.test(src)) return null;
+        const img = new Image();
+        img.src = src;
+        await img.decode();
+        return src;
+      })
+      .catch(() => null)
+      .then(src => {
+        if (this.capasEmCurso.get(chave) === consulta) {
+          this.capasEmCurso.delete(chave);
+          if (src) {
+            if (this.capasRecuperadas.size >= 32) this.capasRecuperadas.delete(this.capasRecuperadas.keys().next().value!);
+            this.capasRecuperadas.set(chave, src);
+          }
+        }
+        return src;
+      });
+    this.capasEmCurso.set(chave, consulta);
+    return consulta;
+  }
+
+  private async recuperarCapaPesquisa(marcador: HTMLElement, isbn: string, principal?: string): Promise<void> {
+    const usuario = this.usuarioAtual;
+    const vigente = (): boolean => marcador.isConnected && this.usuarioAtual === usuario;
+    if (!usuario || !vigente()) return;
+    const status = marcador.closest('.cover-preview-row')?.querySelector('#cover-preview-status');
+    if (status) status.textContent = 'Buscando capa para esta edição…';
+    let src = principal ? await this.consultarCapa('apis:cover', principal) : null;
+    const urlVisualizada = src ? principal : undefined;
+    if (!src && Util.isbnCompleto(isbn) && vigente()) {
+      src = await this.consultarCapa('apis:cover-fallback', principal ? { isbn, excluir: principal } : { isbn });
+    }
+    if (!vigente()) return;
+    if (src) {
+      const img = new Image();
+      img.className = marcador.className;
+      img.classList.remove('cover-placeholder');
+      img.alt = 'Capa do livro';
+      img.src = src;
+      marcador.replaceWith(img);
+      this.informarPreviaRecuperada(img, urlVisualizada);
+    } else if (status) {
+      status.textContent = 'Capa indisponível para esta edição. Você pode cadastrar o livro mesmo assim.';
+    }
+  }
+
+  private informarPreviaRecuperada(img: HTMLImageElement, urlVisualizada?: string): void {
+    if (!img.isConnected) return;
+    const status = img.closest('.cover-preview-row')?.querySelector('#cover-preview-status');
+    const campo = img.closest('form')?.querySelector<HTMLInputElement>('#field-capa_url');
+    if (!status || !campo) return;
+    const mesmaUrl = !!urlVisualizada && campo.value === urlVisualizada;
+    if (mesmaUrl && img.src === urlVisualizada) return;
+    status.textContent = mesmaUrl
+      ? 'Prévia recuperada da mesma URL do formulário. Será gravada somente a URL, não a imagem da prévia.'
+      : campo.value
+        ? 'Capa alternativa recuperada apenas para prévia. Ela não será gravada; será mantida a URL do formulário.'
+        : 'Capa recuperada apenas para prévia. Ela não será gravada; o livro será salvo sem URL de capa.';
+  }
+
+  private substituirCapa(img: HTMLImageElement): HTMLElement {
+    img.insertAdjacentHTML('afterend', Html.capaIndisponivel(img.className));
+    const marcador = img.nextElementSibling as HTMLElement;
+    img.remove();
+    return marcador;
+  }
+
   private async erroCapa(evento: Event): Promise<void> {
     const img = evento.target;
-    if (!(img instanceof HTMLImageElement) || !img.dataset.coverUrl) return;
+    if (!(img instanceof HTMLImageElement) || !img.isConnected) return;
+    const principal = img.dataset.coverPrimary;
+    if (principal) {
+      await this.recuperarCapaPesquisa(this.substituirCapa(img), img.dataset.coverIsbn || '', principal);
+      return;
+    }
+
     const original = img.dataset.coverUrl;
+    if (!original) return;
     if (!img.dataset.proxyTentado) {
       img.dataset.proxyTentado = '1';
       try {
         const src = await Api.chamar<string | null>('apis:cover', original);
         if (src && img.isConnected) { img.src = src; return; }
-      } catch { /* cai para a alternativa */ }
+      } catch {   }
     }
     const isbn = img.dataset.coverIsbn || '';
     const alternativa = isbn ? Util.urlCapa(`https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg?default=false`) : null;
@@ -290,16 +423,13 @@ class Aplicacao {
       img.src = alternativa;
       return;
     }
-    const marcador = document.createElement('span');
-    marcador.className = `${img.className} cover-placeholder`;
-    marcador.innerHTML = '<i class="bi bi-book"></i>';
-    img.replaceWith(marcador);
-    const status = document.querySelector('#cover-preview-status');
-    if (status && marcador.closest('#book-cover-preview')) status.textContent = 'Capa indisponível para esta edição. Você pode cadastrar o livro mesmo assim.';
+    if (!img.isConnected) return;
+    const marcador = this.substituirCapa(img);
+    const status = marcador.closest('.cover-preview-row')?.querySelector('#cover-preview-status');
+    if (status) status.textContent = 'Capa indisponível para esta edição. Você pode cadastrar o livro mesmo assim.';
   }
 }
 
 let instancia: Aplicacao | null = null;
 function app(): Aplicacao { return instancia!; }
 instancia = new Aplicacao();
-
