@@ -1,4 +1,3 @@
-/** Erro esperado do domínio: a mensagem pode ser mostrada ao usuário. */
 export class ErroDominio extends Error {
   constructor(mensagem: string, readonly codigo?: 'SESSAO') {
     super(mensagem);
@@ -6,7 +5,6 @@ export class ErroDominio extends Error {
   }
 }
 
-/** Validação e normalização de TODA entrada que chega do renderer (nunca confiamos nele). */
 export class Validacao {
   static objeto(dado: unknown): Record<string, unknown> {
     if (!dado || typeof dado !== 'object' || Array.isArray(dado)) throw new ErroDominio('Dados inválidos.');
@@ -41,8 +39,9 @@ export class Validacao {
 
   static data(dado: unknown, campo: string): string {
     const valor = this.texto(dado, campo, 10);
+    const dia = new Date(`${valor}T12:00:00Z`);
     const ok = /^\d{4}-\d{2}-\d{2}$/.test(valor)
-      && new Date(`${valor}T12:00:00Z`).toISOString().slice(0, 10) === valor;
+      && Number.isFinite(dia.valueOf()) && dia.toISOString().slice(0, 10) === valor;
     if (!ok) throw new ErroDominio(`${campo}: data inválida.`);
     return valor;
   }
@@ -58,7 +57,6 @@ export class Validacao {
     return s.toUpperCase();
   }
 
-  /** bcrypt só considera 72 BYTES; acima disso a senha seria truncada em silêncio. */
   static senha(dado: unknown): string {
     if (typeof dado !== 'string' || dado.length < 10 || Buffer.byteLength(dado, 'utf8') > 72) {
       throw new ErroDominio('A senha deve ter de 10 caracteres até 72 bytes.');
