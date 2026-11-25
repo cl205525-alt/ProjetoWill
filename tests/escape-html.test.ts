@@ -7,7 +7,7 @@ import ts from 'typescript';
 const texto = `<b>Teste</b> — Edição d'Ávila & "Cia"`;
 const escapado = '&lt;b&gt;Teste&lt;/b&gt; — Edição d&#39;Ávila &amp; &quot;Cia&quot;';
 const contexto = createContext({ texto });
-for (const arquivo of ['Util', 'Html', 'Graficos']) {
+for (const arquivo of ['Util', 'Html', 'Graficos', 'PaginaBase', 'PaginaCadastroSimples', 'PaginaLivros']) {
   const fonte = readFileSync(`src/renderer/ts/${arquivo}.ts`, 'utf8');
   const compilado = ts.transpileModule(fonte, { compilerOptions: { target: ts.ScriptTarget.ES2022 } });
   runInContext(compilado.outputText, contexto, { filename: `${arquivo}.ts` });
@@ -24,7 +24,7 @@ test('o escape preserva acentos e protege os cinco caracteres especiais do HTML'
 
 test('formulários e busca escapam valores e rótulos sem duplo escape', () => {
   const campo = renderizar(`Html.campo('titulo', texto, texto, 'text', 'required', texto)`);
-  const area = renderizar(`Html.area('sinopse', texto, texto)`);
+  const area = renderizar(`Html.area('observacoes', texto, texto)`);
   const selecao = renderizar(`Html.selecao('editora', texto, [{ id: 1, nome: texto }], 1, '', texto)`);
   assert.ok(campo.includes(`value="${escapado}"`));
   assert.ok(area.includes(`>${escapado}</textarea>`));
@@ -51,4 +51,55 @@ test('os gráficos renderizam rótulos como texto e totais como números', () =>
   assert.ok(html.includes(`title="${escapado}"`));
   assert.ok(html.includes('<b>3</b>'));
   assert.ok(!renderizar(`Graficos.rosca({ em_dia: texto, atrasados: 2, devolvidos: 1 })`).includes('<b>Teste</b>'));
+});
+
+test('Datas inexistentes e números inválidos não são exibidos como valores reais', () => {
+  assert.equal(renderizar("Util.data('2026-02-29')"), '—');
+  assert.equal(renderizar("Util.dataHora('2026-99-01 09:21:00')"), '—');
+  assert.equal(renderizar("Util.numero('Infinity')"), 0);
+  assert.equal(renderizar("Util.data('2024-02-29')"), '29/02/2024');
+});
+
+test('a tela de autor lista somente vínculos pelo ID inteiro, inclusive livros arquivados e coautorias', () => {
+  const html = renderizar(`(() => {
+    const estado = { autores: [{ id: 1, nome: texto, total_livros: 2 }], livros: [
+      { id: 2, titulo: 'Título arquivado', autor_ids: '2, 1', ativo: false },
+      { id: 3, titulo: 'Título ativo', autor_ids: '1', ativo: true },
+      { id: 4, titulo: 'Autor diferente', autor_ids: '11' }
+    ] };
+    const pagina = new PaginaAutores({ estado });
+    const lista = pagina.render();
+    pagina.autorSelecionado = '1';
+    return lista + '\\n' + pagina.render();
+  })()`);
+  assert.match(html, /data-action="livros-do-autor"/);
+  assert.match(html, /Ver 2 livros de/);
+  assert.match(html, /Título arquivado|Arquivado/);
+  assert.ok(html.includes('Título ativo'));
+  assert.ok(!html.includes('Autor diferente'));
+  assert.ok(html.includes(escapado));
+});
+
+test('um gênero bibliográfico válido aparece mesmo quando o acervo ainda está vazio', () => {
+  assert.equal(renderizar(`new GeneroAssistido({ isbn: '9788535914849', genero: 'Literatura' }, undefined, false).nome([])`), 'Literatura');
+  assert.equal(renderizar(`new GeneroAssistido({ isbn: '9788535914849', genero: 'Literatura' }, undefined, false).nome(['literatura'])`), 'literatura');
+});
+
+test('a confirmação pelo ISBN substitui o ano provisório, mas não uma correção manual', () => {
+  const resultado = renderizar(`(() => {
+    const campo = { value: '' }, status = { textContent: '' };
+    globalThis.document = { querySelector: seletor => seletor.includes('metadata-ano-status') ? status : campo };
+    try {
+      const p = new PaginaLivros({});
+      p.aplicarAno({ isbn: '9788535914849', ano: 1949 }, false);
+      if (campo.value !== '1949' || !p.anoEmConferencia) throw new Error('Ano provisório ausente');
+      p.aplicarAno({ isbn: '9788535914849', ano: 2009, fonteAno: 'BrasilAPI (CBL)' }, true);
+      if (campo.value !== '2009' || p.anoEmConferencia || !status.textContent.includes('CBL')) throw new Error('Ano confirmado não aplicado');
+      p.editados.add('ano_publicacao');
+      campo.value = '2008';
+      p.aplicarAno({ isbn: '9788535914849', ano: 2009 }, true);
+      return campo.value;
+    } finally { delete globalThis.document; }
+  })()`);
+  assert.equal(resultado, '2008');
 });

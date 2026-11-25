@@ -22,7 +22,7 @@ test('só registra Enviado depois do aceite e separa destinatário inválido de 
   const emails: EmailLembrete[] = [];
   const tentativas = new Map<number, TentativaLembrete>([
     [1, tentativa],
-    // Um empréstimo já devolvido ou renovado entre a seleção e a reserva não dispara envio.
+
     [3, { ...tentativa, id: 43, email: null }],
     [4, { ...tentativa, id: 44, email: 'a@example.com,b@example.com' }],
     [5, { ...tentativa, id: 45, email: 'recusado@example.com' }]
