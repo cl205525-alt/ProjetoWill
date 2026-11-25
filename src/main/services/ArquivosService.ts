@@ -16,26 +16,20 @@ export interface ResultadoArquivo { salvo: boolean; caminho?: string; registros?
 type TipoColuna = 'int' | 'texto' | 'enum';
 interface EsquemaTabela { nome: string; colunas: Record<string, TipoColuna>; enum?: Record<string, readonly string[]>; chavesComposta?: boolean; }
 
-/** Ordem respeita as chaves estrangeiras (pais antes dos filhos). `colaboradores` fica de fora de propósito. */
 const ESQUEMA_BACKUP: EsquemaTabela[] = [
   { nome: 'editoras', colunas: { id: 'int', nome: 'texto', cidade: 'texto' } },
   { nome: 'autores', colunas: { id: 'int', nome: 'texto', nacionalidade: 'texto' } },
   { nome: 'leitores', colunas: { id: 'int', nome: 'texto', email: 'texto', telefone: 'texto', cidade: 'texto', uf: 'texto', ativo: 'int', cadastrado_em: 'texto' } },
-  { nome: 'livros', colunas: { id: 'int', titulo: 'texto', isbn: 'texto', ano_publicacao: 'int', genero: 'texto', sinopse: 'texto', capa_url: 'texto', editora_id: 'int', quantidade: 'int', ativo: 'int', criado_em: 'texto' } },
+  { nome: 'livros', colunas: { id: 'int', titulo: 'texto', isbn: 'texto', ano_publicacao: 'int', genero: 'texto', capa_url: 'texto', editora_id: 'int', quantidade: 'int', ativo: 'int', criado_em: 'texto' } },
   { nome: 'livro_autores', colunas: { livro_id: 'int', autor_id: 'int' }, chavesComposta: true },
   { nome: 'reservas', colunas: { id: 'int', livro_id: 'int', leitor_id: 'int', status: 'enum', criada_em: 'texto', avisada_em: 'texto' }, enum: { status: ['aguardando', 'disponivel', 'concluida', 'cancelada'] } },
   { nome: 'emprestimos', colunas: { id: 'int', livro_id: 'int', leitor_id: 'int', colaborador_id: 'int', data_retirada: 'texto', data_prevista: 'texto', data_devolucao: 'texto', criado_em: 'texto' } },
   { nome: 'notificacoes', colunas: { id: 'int', reserva_id: 'int', leitor_id: 'int', mensagem: 'texto', lida: 'int', criada_em: 'texto' } }
 ];
 
-/**
- * Arquivos (módulo fs do Node, aula 7): relatórios em .txt/.csv e backup/restauração em JSON.
- * Os diálogos de arquivo usam a API `dialog` do Electron e só rodam no processo principal.
- */
 export class ArquivosService {
   constructor(private readonly cadastros: CadastroService, private readonly circulacao: CirculacaoService) {}
 
-  // ---------- Relatórios ----------
   async exportarRelatorio(janela: BrowserWindow | null, dados: unknown): Promise<ResultadoArquivo> {
     const d = V.objeto(dados);
     const tipo = V.opcao(d.tipo, TIPOS, 'relatório');
@@ -88,7 +82,6 @@ export class ArquivosService {
     return [`LUMI — ${t.titulo}`, `Gerado em ${agora}`, `${t.linhas.length} registro(s)`, '', linha(t.cabecalhos), separador, ...t.linhas.map(linha), ''].join('\r\n');
   }
 
-  /** CSV com ';' e BOM (abre direto no Excel em português). Neutraliza fórmulas (=, +, -, @) injetadas em células. */
   static paraCsv(t: Tabela): string {
     const celula = (v: string): string => {
       const seguro = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
@@ -97,13 +90,12 @@ export class ArquivosService {
     return `\uFEFF${[t.cabecalhos, ...t.linhas].map(l => l.map(celula).join(';')).join('\r\n')}\r\n`;
   }
 
-  // ---------- Backup ----------
   async exportarBackup(janela: BrowserWindow | null): Promise<ResultadoArquivo> {
     const conteudo: Record<string, unknown[]> = {};
     const detalhes: Record<string, number> = {};
     let total = 0;
     for (const t of ESQUEMA_BACKUP) {
-      const linhas = await Conexao.consultar<RowDataPacket>(`SELECT * FROM ${t.nome}`);
+      const linhas = await Conexao.consultar<RowDataPacket>(`SELECT ${Object.keys(t.colunas).join(', ')} FROM ${t.nome}`);
       conteudo[t.nome] = linhas.map(l => ({ ...l }));
       detalhes[t.nome] = linhas.length;
       total += linhas.length;
@@ -116,7 +108,7 @@ export class ArquivosService {
     });
     if (!escolha) return { salvo: false };
     const caminho = escolha.toLowerCase().endsWith('.json') ? escolha : `${escolha}.json`;
-    // Segurança: contas da equipe e hashes de senha NÃO entram no arquivo.
+
     const envelope = { aplicativo: 'lumi-biblioteca', versao: 2, geradoEm: agora.toISOString(), tabelas: conteudo };
     await writeFile(caminho, JSON.stringify(envelope, null, 2), 'utf8');
     return { salvo: true, caminho, registros: total, detalhes };
@@ -161,7 +153,6 @@ export class ArquivosService {
     return { salvo: true, caminho, registros: total, detalhes };
   }
 
-  /** Valida estrutura, tipos e tamanhos. Só colunas conhecidas passam; o restante é descartado. */
   private validarBackup(bruto: unknown): Record<string, Record<string, string | number | null>[]> {
     const raiz = V.objeto(bruto);
     if (raiz.aplicativo !== 'lumi-biblioteca') throw new ErroDominio('Este arquivo não é um backup do Lumi.');
