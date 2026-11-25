@@ -1,7 +1,6 @@
 import type { RegistroLembretesDevolucao, ResultadoEnvioLembrete, TentativaLembrete } from '../repositorios/LembretesDevolucaoRepositorio';
 import { enderecoEmailUnico, type EnviadorEmailLembrete } from './EmailResendService';
 
-/** Usa o dia civil na máquina da biblioteca, não as próximas 24 horas nem o fuso do MySQL. */
 export function prazoAmanha(agora: Date): string {
   const dia = new Date(agora);
   dia.setDate(dia.getDate() + 1);
@@ -51,7 +50,7 @@ export class LembretesDevolucaoService {
       });
       return { status: 'enviado', referencia };
     } catch {
-      // O erro HTTP pode conter destinatário e chave. Não é armazenado nem exibido.
+
       return { status: 'falha' };
     }
   }
