@@ -44,8 +44,7 @@ export class LembretesDevolucaoRepositorio implements RegistroLembretesDevolucao
 
   async reservarTentativa(emprestimoId: number, prazo: string): Promise<TentativaLembrete | null> {
     return Conexao.transacao(async conn => {
-      // Revalida o empréstimo e serializa as tentativas entre instalações do Lumi.
-      // O lock acaba antes da chamada ao provedor; não bloqueia devoluções durante o envio.
+
       const [ativos] = await conn.execute<RowDataPacket[]>(`
         SELECT id FROM emprestimos
         WHERE id = ? AND data_prevista = ? AND data_devolucao IS NULL AND data_retirada < data_prevista
@@ -85,7 +84,6 @@ export class LembretesDevolucaoRepositorio implements RegistroLembretesDevolucao
   }
 }
 
-/** Permite continuar usando as notificações de reserva antes de atualizar uma instalação antiga. */
 export function tabelaLembretesAusente(erro: unknown): boolean {
   return typeof erro === 'object' && erro !== null && 'code' in erro && erro.code === 'ER_NO_SUCH_TABLE';
 }
