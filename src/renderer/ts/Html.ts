@@ -1,6 +1,5 @@
-/** Construtores de HTML reutilizados pelas páginas. Todo valor dinâmico passa por Util.esc. */
 class Html {
-  static pill(texto: string, tom: Tom = 'neutral'): string { return `<span class="pill ${tom}">${Util.esc(texto)}</span>`; }
+  static pill(texto: string, tom: Tom = 'neutral'): string { return `<span class="pill ${Util.esc(tom)}">${Util.esc(texto)}</span>`; }
 
   static botao(acao: string, rotulo: string, icone: string, classe = 'btn-primary app-primary', extras = ''): string {
     return `<button type="button" class="btn ${Util.esc(classe)}" data-action="${Util.esc(acao)}" ${extras}><i class="bi bi-${Util.esc(icone)} me-2"></i>${Util.esc(rotulo)}</button>`;
@@ -19,12 +18,27 @@ class Html {
   }
 
   static capa(url: unknown, classe = 'cover-mini', isbn: unknown = ''): string {
+
     const codigo = Util.codigoIsbn(String(isbn ?? ''));
     const alternativa = Util.isbnCompleto(codigo) ? `https://covers.openlibrary.org/b/isbn/${codigo}-M.jpg?default=false` : '';
     const atual = Util.urlCapa(url) || Util.urlCapa(alternativa);
     return atual
       ? `<img class="${Util.esc(classe)}" src="${Util.esc(atual)}" data-cover-url="${Util.esc(atual)}" data-cover-isbn="${Util.esc(codigo)}" alt="Capa do livro" loading="lazy" referrerpolicy="no-referrer" />`
-      : `<span class="${Util.esc(classe)} cover-placeholder"><i class="bi bi-book"></i></span>`;
+      : Html.capaIndisponivel(classe);
+  }
+
+  static capaIndisponivel(classe: string, isbn = ''): string {
+    return `<span class="${Util.esc(classe)} cover-placeholder" role="img" aria-label="Capa indisponível"${isbn ? ` data-cover-fallback="${Util.esc(isbn)}"` : ''}><i class="bi bi-book" aria-hidden="true"></i></span>`;
+  }
+
+  static capaPesquisa(url: unknown, classe: string, isbn: unknown): string {
+    const codigo = Util.codigoIsbn(String(isbn ?? ''));
+
+    const candidato = Util.isbnCompleto(codigo) ? codigo : '';
+    const principal = Util.urlCapa(url);
+    return principal
+      ? `<img class="${Util.esc(classe)}" src="${Util.esc(principal)}" data-cover-primary="${Util.esc(principal)}" data-cover-isbn="${Util.esc(candidato)}" alt="Capa do livro" loading="lazy" referrerpolicy="no-referrer" />`
+      : Html.capaIndisponivel(classe, candidato);
   }
 
   static avatar(nome: unknown, classe = 'avatar'): string {
@@ -32,30 +46,33 @@ class Html {
   }
 
   static campo(nome: string, rotulo: string, valor: unknown = '', tipo = 'text', extras = '', ajuda = ''): string {
-    return `<div class="field-block"><label class="field-label" for="field-${Util.esc(nome)}">${Util.esc(rotulo)}</label><input class="form-control field-input" id="field-${Util.esc(nome)}" name="${Util.esc(nome)}" type="${tipo}" value="${Util.esc(valor)}" ${extras} />${ajuda ? `<div class="field-helper">${ajuda}</div>` : ''}</div>`;
+    const campo = Util.esc(nome);
+    return `<div class="field-block"><label class="field-label" for="field-${campo}">${Util.esc(rotulo)}</label><input class="form-control field-input" id="field-${campo}" name="${campo}" type="${Util.esc(tipo)}" value="${Util.esc(valor)}" ${extras} />${ajuda ? `<div class="field-helper">${Util.esc(ajuda)}</div>` : ''}</div>`;
   }
 
   static area(nome: string, rotulo: string, valor: unknown = '', extras = ''): string {
-    return `<div class="field-block"><label class="field-label" for="field-${Util.esc(nome)}">${Util.esc(rotulo)}</label><textarea class="form-control field-input" id="field-${Util.esc(nome)}" name="${Util.esc(nome)}" ${extras}>${Util.esc(valor)}</textarea></div>`;
+    const campo = Util.esc(nome);
+    return `<div class="field-block"><label class="field-label" for="field-${campo}">${Util.esc(rotulo)}</label><textarea class="form-control field-input" id="field-${campo}" name="${campo}" ${extras}>${Util.esc(valor)}</textarea></div>`;
   }
 
   static selecao(nome: string, rotulo: string, opcoes: Registro[], valor: unknown = '', extras = '', vazio = 'Selecione...', texto?: (o: Registro) => string): string {
     const itens = opcoes.map(o => `<option value="${Util.numero(o.id)}" ${String(o.id) === String(valor ?? '') ? 'selected' : ''}>${Util.esc(texto ? texto(o) : (o.nome || o.titulo))}</option>`).join('');
-    return `<div class="field-block"><label class="field-label" for="field-${Util.esc(nome)}">${Util.esc(rotulo)}</label><select class="form-select field-input" id="field-${Util.esc(nome)}" name="${Util.esc(nome)}" ${extras}><option value="">${vazio}</option>${itens}</select></div>`;
+    const campo = Util.esc(nome);
+    return `<div class="field-block"><label class="field-label" for="field-${campo}">${Util.esc(rotulo)}</label><select class="form-select field-input" id="field-${campo}" name="${campo}" ${extras}><option value="">${Util.esc(vazio)}</option>${itens}</select></div>`;
   }
 
-  /** Lista de caixas de marcação em forma de "chips" (melhor que select múltiplo com Ctrl). */
   static checks(nome: string, rotulo: string, opcoes: Registro[], marcados: unknown = ''): string {
     const ids = String(marcados ?? '').split(',').filter(Boolean);
-    const itens = opcoes.map(o => `<label class="chip"><input type="checkbox" name="${Util.esc(nome)}" value="${Util.numero(o.id)}" ${ids.includes(String(o.id)) ? 'checked' : ''} /><span>${Util.esc(o.nome)}</span></label>`).join('');
+    const campo = Util.esc(nome);
+    const itens = opcoes.map(o => `<label class="chip"><input type="checkbox" name="${campo}" value="${Util.numero(o.id)}" ${ids.includes(String(o.id)) ? 'checked' : ''} /><span>${Util.esc(o.nome)}</span></label>`).join('');
     return `<div class="field-block"><span class="field-label">${Util.esc(rotulo)}</span><div class="chip-list">${itens || '<span class="small-muted">Nenhum autor cadastrado ainda.</span>'}</div></div>`;
   }
 
-  static secao(icone: string, texto: string): string { return `<div class="section-detail"><i class="bi bi-${Util.esc(icone)}"></i><span>${texto}</span></div>`; }
+  static secao(icone: string, texto: string): string { return `<div class="section-detail"><i class="bi bi-${Util.esc(icone)}"></i><span>${Util.esc(texto)}</span></div>`; }
 
-  static barra(opcoes: { busca: string; filtros?: [string, string, number?][]; atual?: string; extra?: string; placeholder?: string }): string {
+  static barra(opcoes: { busca: string; filtros?: [valor: string, rotulo: string, contagem?: number][]; atual?: string; extra?: string; placeholder?: string }): string {
     const filtros = opcoes.filtros?.length
-      ? `<div class="filter-buttons">${opcoes.filtros.map(([valor, rotulo, total]) => `<button type="button" class="filter-btn ${opcoes.atual === valor ? 'active' : ''}" data-action="filtro" data-valor="${Util.esc(valor)}">${Util.esc(rotulo)}${total === undefined ? "" : ` <span data-filter-count>${Util.numero(total)}</span>`}</button>`).join('')}</div>` : '';
+      ? `<div class="filter-buttons">${opcoes.filtros.map(([valor, rotulo, contagem]) => `<button type="button" class="filter-btn ${opcoes.atual === valor ? 'active' : ''}" data-action="filtro" data-valor="${Util.esc(valor)}">${Util.esc(rotulo)}${contagem === undefined ? '' : ` (<span data-filter-count aria-live="polite">${Util.numero(contagem)}</span>)`}</button>`).join('')}</div>` : '';
     return `<div class="toolbar"><div class="toolbar-search"><i class="bi bi-search"></i><input id="busca-local" type="search" data-input="busca" placeholder="${Util.esc(opcoes.placeholder ?? 'Pesquisar nesta lista...')}" value="${Util.esc(opcoes.busca)}" /></div>${filtros}${opcoes.extra ?? ''}</div>`;
   }
 
@@ -79,6 +96,5 @@ class Html {
       <div class="table-foot"><span class="count-note">${Util.plural(total, 'registro', 'registros')}</span>${Html.paginacao(total, pagina, porPagina)}</div>`;
   }
 
-  static detalhe(rotulo: string, valor: string): string { return `<div class="detail-item"><span>${Util.esc(rotulo)}</span><b>${Util.esc(valor)}</b></div>`; }
+  static detalhe(rotulo: string, valor: unknown): string { return `<div class="detail-item"><span>${Util.esc(rotulo)}</span><b>${Util.esc(valor)}</b></div>`; }
 }
-
