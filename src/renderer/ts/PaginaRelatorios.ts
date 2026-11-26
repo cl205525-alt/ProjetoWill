@@ -1,4 +1,3 @@
-/** Relatórios (.txt/.csv) e backup (.json): usa o módulo fs e os diálogos nativos no processo principal. */
 class PaginaRelatorios extends PaginaBase {
   readonly id = 'reports' as const;
   readonly nome = 'Relatórios e backup';
