@@ -61,7 +61,6 @@ class PaginaLeitores extends PaginaBase {
     });
   }
 
-  /** API 3 (ViaCEP): preenche cidade e UF. */
   private async consultarCep(): Promise<void> {
     const cep = document.querySelector<HTMLInputElement>('#reader-cep')?.value ?? '';
     const r = await Api.chamar<{ cidade: string; uf: string }>('apis:cep', cep);
