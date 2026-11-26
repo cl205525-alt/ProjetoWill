@@ -74,7 +74,6 @@ class PaginaEmprestimos extends PaginaBase {
     });
   }
 
-  /** API 4 (BrasilAPI): calcula o vencimento em dias úteis descontando feriados nacionais. */
   private async calcularPrazo(alvo: string, inicioId: string, diasId: string, ajudaId: string): Promise<void> {
     const inicio = document.querySelector<HTMLInputElement>(`#field-${inicioId}`)?.value || Util.hoje();
     const dias = Number(document.querySelector<HTMLSelectElement>(`#${diasId}`)?.value);
