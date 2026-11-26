@@ -1,4 +1,3 @@
-/** Gráficos em SVG/HTML puros (sem bibliotecas). Cores vêm de classes CSS, compatíveis com o tema escuro. */
 class Graficos {
   static barrasMensais(meses: { mes: string; total: number }[]): string {
     const maximo = Math.max(1, ...meses.map(m => m.total));
